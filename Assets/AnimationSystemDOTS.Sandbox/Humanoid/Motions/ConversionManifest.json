@@ -1,0 +1,54 @@
+[
+  {
+    "source": "D:\\Projects\\Blender\\TestFieldProject\\HumanMotion\\Refs\\UniMate_Walk_Variant01.glb",
+    "sha256": "95032223e55cea4936af45ce10b03f3dfc1053c96498f5aa7a5a10fed17ab909",
+    "output": "Walk.fbx",
+    "blender": "5.2.1 LTS",
+    "frameStart": 0,
+    "frameEnd": 59,
+    "fps": 30,
+    "bones": 64
+  },
+  {
+    "source": "D:\\Projects\\Blender\\TestFieldProject\\HumanMotion\\Refs\\UniMate_Jump_Variant03.glb",
+    "sha256": "f4daf2bf09a66f0f85869e89b733d0a6612d1e68ced922a808d8df0bdca82c57",
+    "output": "Jump03.fbx",
+    "blender": "5.2.1 LTS",
+    "frameStart": 0,
+    "frameEnd": 59,
+    "fps": 30,
+    "bones": 64
+  },
+  {
+    "source": "D:\\Projects\\Blender\\TestFieldProject\\HumanMotion\\Refs\\UniMate_Punch_Variant01.glb",
+    "sha256": "1be46747a828fad76cde65126abd4817b367df6cd40adb57344cac1fed544245",
+    "output": "Punch.fbx",
+    "blender": "5.2.1 LTS",
+    "frameStart": 0,
+    "frameEnd": 59,
+    "fps": 30,
+    "bones": 64
+  },
+  {
+    "source": "D:\\Projects\\Blender\\TestFieldProject\\HumanMotion\\Refs\\UniMate_Squat_Variant02.glb",
+    "sha256": "8273d00bcb931ec2b282d6fa64058247492378ff37b0546234b86e64739d257b",
+    "output": "Squat02.fbx",
+    "blender": "5.2.1 LTS",
+    "frameStart": 0,
+    "frameEnd": 59,
+    "fps": 30,
+    "bones": 64
+  },
+  {
+    "source": "D:\\Projects\\Blender\\TestFieldProject\\HumanMotion\\HumanMale_Workout_v16.blend",
+    "sha256": "8217304f1233e1a464a1816a3b783666b1bb9484cdc975946d6c93f6d101b0c7",
+    "output": "Workout.fbx",
+    "action": "HumanMale_Workout_Final",
+    "frameStart": 1,
+    "frameEnd": 296,
+    "fps": 24,
+    "sampleFps": 60,
+    "bones": 65,
+    "blender": "5.2.1 LTS"
+  }
+]

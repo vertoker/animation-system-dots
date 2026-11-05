@@ -14,7 +14,8 @@ Version: 0.1.0 development. The implementation plan is `PLAN.md` at the project 
 | Entities Graphics skinning | experimental, stage 3 in progress | 35/35 Runtime + 51/51 Editor; stock buffers, animated roots, per-mesh affine palettes, bounds, live rebake/removal and SubScene reload; D3D12 Player verifies edge/shadow-only visibility and classic renderer LOD; depth/normals/tangents still open; see Rendering.md |
 | Controller state machine | unsupported | Parameters, transition traces; stage 4 |
 | Layers, masks, five blend-tree modes | unsupported | Differential controller tests; stage 5 |
-| Humanoid and root motion | unsupported | Avatar-specific bake and movement integration; stage 6 |
+| Humanoid target-specific Editor bake | experimental, partial stage 6 | Imported muscle clips retarget through a valid target Avatar into local TRS; 1000-instance cleaned Workout scene, bind-pose/facing regression, Blender joint reference, native oracle and second-proportion Avatar; see RenderingChecks.md |
+| Root motion extraction/application | unsupported | Crowd uses in-place planar playback, retaining authored turns and height; movement integration remains stage 6 |
 | Events, scalar curves, blend shapes, exports | unsupported | Interval traversal, lifecycle; stage 7 |
 | IK and procedural constraints | unsupported | Analytic and singular configurations; stage 8 |
 | Animation visibility/LOD scheduling | unsupported | Reactivation, time/event continuity; stage 9. Classic renderer mesh selection is verified separately in stage 3. |

@@ -1,4 +1,5 @@
 using Unity.Collections;
+using Unity.Burst;
 using Unity.Entities;
 using Unity.Rendering;
 
@@ -53,13 +54,19 @@ namespace AnimationSystemDOTS.Rendering
             ReleaseMissing(removedBinding); ReleaseMissing(removedInfo); ReleaseMissing(removedAssets);
             // Live baking or another explicit owner may replace the published
             // info. Release our previous references before resolving new assets.
-            using (var entities = changed.ToEntityArray(Allocator.Temp))
-                foreach (var entity in entities)
+            // Stock deformation touches the enableable MMI change version every
+            // frame. Compare in one Burst job; per-entity EntityManager reads
+            // otherwise turn a stable 3000-renderer crowd into thousands of sync checks.
+            using (var replacements = new NativeList<Entity>(Allocator.TempJob))
+            {
+                Dependency = new FindReplacementsJob { Replacements = replacements }.Schedule(changed, Dependency);
+                Dependency.Complete();
+                foreach (var entity in replacements)
                 {
                     var registration = EntityManager.GetComponentData<AnimationRenderRegistration>(entity);
-                    if (!Same(EntityManager.GetComponentData<MaterialMeshInfo>(entity), registration.Published))
-                        UpdateRegistration(entity, registration, true);
+                    UpdateRegistration(entity, registration, true);
                 }
+            }
             using (var entities = pending.ToEntityArray(Allocator.Temp))
                 foreach (var entity in entities)
                 {
@@ -67,6 +74,16 @@ namespace AnimationSystemDOTS.Rendering
                         ? EntityManager.GetComponentData<AnimationRenderSource>(entity).Registration : default;
                     UpdateRegistration(entity, provenance, false);
                 }
+        }
+
+        [BurstCompile]
+        partial struct FindReplacementsJob : IJobEntity
+        {
+            public NativeList<Entity> Replacements;
+            void Execute(Entity entity, in AnimationRenderRegistration registration, in MaterialMeshInfo current)
+            {
+                if (!Same(current, registration.Published)) Replacements.Add(entity);
+            }
         }
 
         void UpdateRegistration(Entity entity, AnimationRenderRegistration previous, bool alreadyOwned)

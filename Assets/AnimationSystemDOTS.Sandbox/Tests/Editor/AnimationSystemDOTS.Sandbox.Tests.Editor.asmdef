@@ -1,0 +1,6 @@
+{
+  "name": "AnimationSystemDOTS.Sandbox.Tests.Editor",
+  "references": ["AnimationSystemDOTS.Sandbox", "AnimationSystemDOTS.Core", "Unity.Entities", "Unity.Transforms", "Unity.Collections", "Unity.Mathematics"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"]
+}

@@ -9,14 +9,23 @@ using UnityEngine.SceneManagement;
 
 namespace AnimationSystemDOTS.Editor.Baking
 {
+    internal interface IEditorClipSampler : IDisposable
+    {
+        AnimationClip Clip { get; }
+        EditorCurveBinding[] Bindings { get; }
+        string RootNormalizationIdentity { get; }
+        bool IsLooping { get; }
+        BoneLocalPose[] Sample(double time);
+    }
     // Independent from the PlayableGraph oracle: direct native clip sampling on a private hierarchy.
-    internal sealed class EditorClipSampler : IDisposable
+    internal sealed class EditorClipSampler : IEditorClipSampler
     {
         Scene scene;
         GameObject instance;
         public AnimationClip Clip { get; private set; }
         public EditorCurveBinding[] Bindings { get; private set; }
         public string RootNormalizationIdentity { get; private set; } = "";
+        public bool IsLooping => AnimationUtility.GetAnimationClipSettings(Clip).loopTime;
         Transform[] bones;
         Vector3[] restPositions;
         Quaternion[] restRotations;

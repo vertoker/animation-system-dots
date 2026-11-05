@@ -56,9 +56,11 @@ namespace AnimationSystemDOTS.Editor.Baking
                         throw new ArgumentException(request.Clip.name + ": target hierarchy no longer matches the rig definition.");
                 }
                 finally { comparison.Rig.Dispose(); }
-                using (var sampler = new EditorClipSampler(request.Source, request.Clip, request.Rig))
+                using (IEditorClipSampler sampler = request.Clip.isHumanMotion
+                    ? new HumanoidClipSampler(request.Source, request.Clip, request.Rig)
+                    : new EditorClipSampler(request.Source, request.Clip, request.Rig))
                 {
-                    ValidateBindings(sampler, request.Rig);
+                    if (!request.Clip.isHumanMotion) ValidateBindings(sampler, request.Rig);
                     var settings = request.Settings;
                     var duration = (double)sampler.Clip.length;
                     var count = duration == 0 ? 1 : checked((int)Math.Ceiling(duration * settings.SampleRate) + 1);
@@ -88,7 +90,7 @@ namespace AnimationSystemDOTS.Editor.Baking
                     data.ContentKey = new FixedString128Bytes(result.ContentKey);
                     data.RigKey = request.Rig.Value.ContentKey;
                     data.Duration = duration; data.SampleStep = step; data.SampleCount = count;
-                    data.IsLooping = AnimationUtility.GetAnimationClipSettings(sampler.Clip).loopTime ? (byte)1 : (byte)0;
+                    data.IsLooping = sampler.IsLooping ? (byte)1 : (byte)0;
                     var tracks = builder.Allocate(ref data.Tracks, frames[0].Length);
                     var reference = builder.Allocate(ref data.ReferencePose, frames[0].Length);
                     for (var bone = 0; bone < tracks.Length; bone++)
@@ -146,8 +148,9 @@ namespace AnimationSystemDOTS.Editor.Baking
         {
             if (request.Source == null || request.Clip == null || !request.Rig.IsCreated || request.Settings == null)
                 throw new ArgumentException("Clip bake requires source hierarchy, clip, rig definition and explicit settings.");
-            if (request.Clip.legacy || request.Clip.isHumanMotion)
-                throw new ArgumentException(request.Clip.name + ": this converter supports Generic clips; Legacy is unsupported and Humanoid is pending stage 6.");
+            if (request.Clip.legacy)
+                throw new ArgumentException(request.Clip.name + ": Legacy clips are unsupported.");
+            if (request.Clip.isHumanMotion) HumanoidRigValidator.Validate(request.Source);
             var s = request.Settings;
             if (s.SampleRate < 1 || s.MaximumSamplesPerClip < 1 || !FiniteTolerance(s.PositionTolerance)
                 || !FiniteTolerance(s.AngleToleranceDegrees) || !FiniteTolerance(s.ScaleTolerance) || !FiniteTolerance(s.ScalarTolerance))
@@ -157,7 +160,7 @@ namespace AnimationSystemDOTS.Editor.Baking
 
         static bool FiniteTolerance(float value) => math.isfinite(value) && value >= 0;
 
-        static void ValidateBindings(EditorClipSampler sampler, BlobAssetReference<RigDefinitionBlob> rig)
+        static void ValidateBindings(IEditorClipSampler sampler, BlobAssetReference<RigDefinitionBlob> rig)
         {
             foreach (var binding in sampler.Bindings)
             {
@@ -184,7 +187,7 @@ namespace AnimationSystemDOTS.Editor.Baking
             => math.all(a.Position == b.Position) && math.all(a.Scale == b.Scale)
                 && (math.all(a.Rotation.value == b.Rotation.value) || math.all(a.Rotation.value == -b.Rotation.value));
 
-        static IEnumerable<double> VerificationTimes(EditorClipSampler sampler, AnimationBakeSettings settings, double duration, int count)
+        static IEnumerable<double> VerificationTimes(IEditorClipSampler sampler, AnimationBakeSettings settings, double duration, int count)
         {
             var times = new SortedSet<double> { 0, duration };
             var step = count > 1 ? duration / (count - 1) : 0;

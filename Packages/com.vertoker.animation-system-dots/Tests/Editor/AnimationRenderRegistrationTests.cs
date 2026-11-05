@@ -32,6 +32,22 @@ namespace AnimationSystemDOTS.Tests
         }
 
         [Test]
+        public void Registration_ChangedDisabledRendererIsStillScannedAndUnchangedHandlesStayOwned()
+            => WithFixture(true, (world, graphics, system, entity, mesh) =>
+            {
+                var em = world.EntityManager; system.Update();
+                var info = em.GetComponentData<MaterialMeshInfo>(entity);
+                em.SetComponentEnabled<MaterialMeshInfo>(entity, false);
+                info.SubMesh = 1; em.SetComponentData(entity, info); system.Update();
+                Assert.That(em.GetComponentData<AnimationRenderRegistration>(entity).Published.SubMesh, Is.EqualTo(1));
+                for (var i = 0; i < 4; i++) { em.SetComponentData(entity, info); system.Update(); }
+                Assert.That(em.IsComponentEnabled<MaterialMeshInfo>(entity), Is.False);
+                Assert.That(graphics.GetMesh(info.MeshID), Is.SameAs(mesh));
+                em.DestroyEntity(entity); system.Update();
+                Assert.That(graphics.GetMesh(info.MeshID), Is.Null);
+            });
+
+        [Test]
         public void Registration_DisabledGraphicsPreservesStaticAssetReferences()
             => WithFixture(false, (world, graphics, system, entity, mesh) =>
             {
