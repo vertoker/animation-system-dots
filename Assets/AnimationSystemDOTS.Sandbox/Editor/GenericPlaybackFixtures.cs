@@ -14,6 +14,43 @@ namespace AnimationSystemDOTS.Sandbox.Editor
         const string Root = "Assets/AnimationSystemDOTS.Sandbox/";
         public const string ScenePath = Root + "Scenes/01_GenericPlayback.unity";
 
+        [MenuItem("Tools/Animation System DOTS/Create LOD Acceptance Fixture")]
+        public static void CreateLodFixture()
+        {
+            var original = SceneManager.GetActiveScene();
+            if (original.isDirty || string.IsNullOrEmpty(original.path)) throw new InvalidOperationException("Save the active scene before creating the LOD fixture.");
+            var path = Root + "Fixtures/Stage3LodRig.prefab";
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (prefab == null)
+            {
+                var rig = PrefabUtility.LoadPrefabContents(Root + "Fixtures/Stage3GenericRig.prefab");
+                try
+                {
+                    rig.name = "Stage3LodRig";
+                    var renderers = rig.GetComponentsInChildren<SkinnedMeshRenderer>();
+                    var group = rig.AddComponent<LODGroup>(); group.fadeMode = LODFadeMode.None;
+                    group.SetLODs(new[] { new LOD(.3f, new Renderer[] { renderers[0] }), new LOD(.01f, new Renderer[] { renderers[1] }) });
+                    group.RecalculateBounds();
+                    prefab = PrefabUtility.SaveAsPrefabAsset(rig, path);
+                }
+                finally { PrefabUtility.UnloadPrefabContents(rig); }
+            }
+            var contentPath = Root + "Scenes/01_GenericPlaybackContent.unity";
+            var scene = SceneManager.GetSceneByPath(contentPath); var alreadyLoaded = scene.IsValid() && scene.isLoaded;
+            if (alreadyLoaded && scene.isDirty) throw new InvalidOperationException("Save the sandbox content scene before adding the LOD reference.");
+            if (!alreadyLoaded) scene = EditorSceneManager.OpenScene(contentPath, OpenSceneMode.Additive);
+            try
+            {
+                foreach (var root in scene.GetRootGameObjects())
+                {
+                    var demo = root.GetComponent<GenericPlaybackDemo>(); if (demo == null) continue;
+                    demo.LodRigPrefab = prefab; EditorUtility.SetDirty(demo);
+                }
+                EditorSceneManager.SaveScene(scene); AssetDatabase.SaveAssets();
+            }
+            finally { if (!alreadyLoaded) EditorSceneManager.CloseScene(scene, true); SceneManager.SetActiveScene(original); }
+        }
+
         [MenuItem("Tools/Animation System DOTS/Create Generic Playback Scene")]
         public static void Create()
         {

@@ -20,11 +20,15 @@ namespace AnimationSystemDOTS.Sandbox
             public int rigs, palettes, renderEntities;
             public int capturedFiles;
             public bool paletteSuccess;
+            public int pose0ColoredPixels, pose1ColoredPixels, poseChangedPixels, shadowChangedPixels;
+            public bool passed;
         }
         IEnumerator Start()
         {
-            var args = Environment.GetCommandLineArgs(); string output = null;
-            for (var i = 0; i + 1 < args.Length; i++) if (args[i] == "-animationCapture") output = Path.GetFullPath(args[i + 1]);
+            var args = Environment.GetCommandLineArgs(); string output = null; var twoWorlds = false; var visibility = false; var lod = false;
+            for (var i = 0; i + 1 < args.Length; i++)
+                if (args[i] == "-animationCapture" || args[i] == "-animationCaptureTwoWorlds" || args[i] == "-animationCaptureVisibility" || args[i] == "-animationCaptureLOD")
+                { output = Path.GetFullPath(args[i + 1]); twoWorlds = args[i] == "-animationCaptureTwoWorlds"; visibility = args[i] == "-animationCaptureVisibility"; lod = args[i] == "-animationCaptureLOD"; }
             if (output == null) yield break;
             Application.runInBackground = true; Directory.CreateDirectory(output);
             var deadline = Time.realtimeSinceStartup + 60;
@@ -43,6 +47,13 @@ namespace AnimationSystemDOTS.Sandbox
             }
             if (controls == default(EntityQuery)) { Debug.LogError("Animation capture timed out waiting for baked prefab spawn."); Application.Quit(2); yield break; }
             var control = controls.GetSingletonEntity(); controls.Dispose();
+            if (twoWorlds) { yield return TwoRenderingWorldsCapture.Run(this, output); yield break; }
+            if (visibility) { yield return VisibilityCapture.Run(this, output); yield break; }
+            if (lod) { yield return LodCapture.Run(this, output); yield break; }
+            yield return CaptureBasic(em, control, output);
+        }
+        public IEnumerator CaptureBasic(EntityManager em, Entity control, string output)
+        {
             foreach (var time in new[] { 0.0, 1.0 })
             {
                 em.SetComponentData(control, new GenericPlaybackControl { Manual = 1, Time = time });
@@ -65,11 +76,18 @@ namespace AnimationSystemDOTS.Sandbox
                 foreach (var state in states) if (state.Result != SkinMatrixPublicationResult.Success) report.paletteSuccess = false;
             }
             report.capturedFiles = Directory.GetFiles(output, "*.png").Length;
+            var pose0 = Path.Combine(output, "pose-0.png"); var pose1 = Path.Combine(output, "pose-1.png");
+            report.pose0ColoredPixels = CapturePixelMetrics.ColoredPixels(pose0);
+            report.pose1ColoredPixels = CapturePixelMetrics.ColoredPixels(pose1);
+            report.poseChangedPixels = CapturePixelMetrics.ChangedPixels(pose0, pose1);
+            report.shadowChangedPixels = CapturePixelMetrics.ChangedPixels(pose1, Path.Combine(output, "pose-1-no-shadows.png"));
+            report.passed = report.paletteSuccess && report.rigs == 2 && report.palettes == 4 && report.renderEntities == 8 && report.capturedFiles == 3
+                && report.pose0ColoredPixels > 20 && report.pose1ColoredPixels > 20 && report.poseChangedPixels > 20 && report.shadowChangedPixels > 20;
             File.WriteAllText(Path.Combine(output, "capture.json"), JsonUtility.ToJson(report, true));
             for (var frame = 0; frame < 4; frame++) yield return new WaitForEndOfFrame();
-            Application.Quit(report.paletteSuccess && report.rigs == 2 && report.palettes == 4 && report.renderEntities == 8 && report.capturedFiles == 3 ? 0 : 3);
+            Application.Quit(report.passed ? 0 : 3);
         }
-        void Capture(string path)
+        public void Capture(string path)
         {
             // A hidden standalone window has no capturable swapchain. Render the
             // real camera offscreen, then synchronously read back this test image.

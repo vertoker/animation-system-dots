@@ -149,6 +149,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: AnimationSystemDOTS.Sandbox::AnimationSystemDOTS.Sandbox.GenericPlaybackDemo
   RigPrefab: {fileID: 808819731705309685, guid: e928f962f0d8b034f801fe1d00d47a19, type: 3}
+  LodRigPrefab: {fileID: 1776220543024432857, guid: fffc0febe5ae75a4887e02ce53d01258, type: 3}
 --- !u!4 &1950796837
 Transform:
   m_ObjectHideFlags: 0

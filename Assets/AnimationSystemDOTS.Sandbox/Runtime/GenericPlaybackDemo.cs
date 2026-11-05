@@ -10,6 +10,7 @@ namespace AnimationSystemDOTS.Sandbox
     public class GenericPlaybackDemo : MonoBehaviour
     {
         public GameObject RigPrefab;
+        public GameObject LodRigPrefab;
     }
 
     public struct GenericPlaybackSpawn : IComponentData
@@ -25,6 +26,7 @@ namespace AnimationSystemDOTS.Sandbox
         public double Time;
         public byte Manual;
     }
+    public struct GenericPlaybackLODSource : IComponentData { public Entity Prefab; }
 
     // This sample owns the external clock. The animation package itself never
     // derives simulation ticks from UnityEngine.Time or a rendering frame.
@@ -41,6 +43,8 @@ namespace AnimationSystemDOTS.Sandbox
             var spawn = em.GetComponentData<GenericPlaybackSpawn>(spawnerEntity);
             if (spawn.Spawned == 0)
             {
+                if (SystemAPI.HasSingleton<GenericPlaybackLODSource>() && System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-animationCaptureLOD") >= 0)
+                    spawn.Prefab = SystemAPI.GetSingleton<GenericPlaybackLODSource>().Prefab;
                 if (!em.HasComponent<AnimationRig>(spawn.Prefab) || !em.HasBuffer<ScriptedPlaybackCommand>(spawn.Prefab)) return;
                 spawn.First = em.Instantiate(spawn.Prefab); spawn.Second = em.Instantiate(spawn.Prefab); spawn.Spawned = 1;
                 em.SetComponentData(spawn.First, LocalTransform.FromPosition(-2.8f, 0, 0));
