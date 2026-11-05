@@ -70,7 +70,7 @@ namespace AnimationSystemDOTS.Editor.Baking
                 var hash = HashFile(temporaryPayload);
                 var payload = Path.Combine(root, "payload-" + hash + ".blob");
                 if (File.Exists(payload) && HashFile(payload) == hash) File.Delete(temporaryPayload);
-                else Publish(temporaryPayload, payload);
+                else Publish(temporaryPayload, payload, cancellation);
                 var entry = new Entry
                 {
                     Schema = AnimationBakeVersion.Schema, ContentKey = key, PayloadHash = hash, UnityVersion = Application.unityVersion,
@@ -81,7 +81,7 @@ namespace AnimationSystemDOTS.Editor.Baking
                 cancellation.ThrowIfCancellationRequested();
                 // A complete immutable payload exists first. This atomic index replacement is the
                 // publication point; interruption before it leaves the previous entry untouched.
-                Publish(temporaryIndex, Path.Combine(root, key + ".json"));
+                Publish(temporaryIndex, Path.Combine(root, key + ".json"), cancellation);
             }
             finally
             {
@@ -90,10 +90,55 @@ namespace AnimationSystemDOTS.Editor.Baking
             }
         }
 
-        static void Publish(string source, string destination)
+        internal static void Publish(string source, string destination, CancellationToken cancellation = default)
         {
-            if (File.Exists(destination)) File.Replace(source, destination, null);
-            else File.Move(source, destination);
+            // Import workers are separate processes. A named mutex avoids simultaneous
+            // ReplaceFile calls on Windows, which can fail even without open readers.
+            var resolved = Path.GetFullPath(destination);
+            if (Path.DirectorySeparatorChar == '\\') resolved = resolved.ToUpperInvariant();
+            using (var gate = new Mutex(false, "AnimationSystemDOTS.Cache." + BakeContentKey.Hash(resolved)))
+            {
+                var acquired = false;
+                try
+                {
+                    try { acquired = gate.WaitOne(TimeSpan.FromSeconds(10)); }
+                    catch (AbandonedMutexException) { acquired = true; }
+                    if (!acquired) throw new IOException("Timed out waiting for animation cache publication: " + destination);
+                    PublishLocked(source, destination, cancellation);
+                }
+                finally { if (acquired) gate.ReleaseMutex(); }
+            }
+        }
+        static void PublishLocked(string source, string destination, CancellationToken cancellation)
+        {
+            for (var attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    cancellation.ThrowIfCancellationRequested();
+                    if (File.Exists(destination)) File.Replace(source, destination, null);
+                    else
+                    {
+                        try { File.Move(source, destination); }
+                        catch (IOException) when (File.Exists(source) && File.Exists(destination))
+                        {
+                            File.Replace(source, destination, null);
+                        }
+                    }
+                    return;
+                }
+                catch (IOException exception) when (attempt < 7 && IsSharingConflict(exception))
+                {
+                    // Windows readers can briefly deny delete/rename sharing. Bound the
+                    // retry; disk, permission and unrelated I/O failures still propagate.
+                    Thread.Sleep(2 << attempt);
+                }
+            }
+        }
+        static bool IsSharingConflict(IOException exception)
+        {
+            var code = exception.HResult & 0xffff;
+            return code == 32 || code == 33;
         }
 
         static void DeleteTemporary(string path)

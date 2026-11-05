@@ -66,7 +66,7 @@ namespace AnimationSystemDOTS.Editor.Baking
                     var step = count > 1 ? duration / (count - 1) : 0;
                     var identity = Application.unityVersion + "|" + AnimationBakeVersion.Converter + "|" + AnimationBakeVersion.Schema + "|"
                         + request.Rig.Value.ContentKey + "|" + BakeContentKey.Asset(request.Clip) + "|" + request.AdditionalDependencyKey + "|"
-                        + JsonUtility.ToJson(settings) + "|" + EditorJsonUtility.ToJson(sampler.Clip);
+                        + JsonUtility.ToJson(settings) + "|" + EditorJsonUtility.ToJson(sampler.Clip) + sampler.RootNormalizationIdentity;
                     result.ContentKey = BakeContentKey.Hash(identity);
                     if (!string.IsNullOrWhiteSpace(request.CacheDirectory)
                         && AnimationBlobCache.TryLoad(request.CacheDirectory, result.ContentKey, request.Rig.Value.ContentKey, out var cached))

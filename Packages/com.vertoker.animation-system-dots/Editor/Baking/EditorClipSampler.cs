@@ -16,6 +16,7 @@ namespace AnimationSystemDOTS.Editor.Baking
         GameObject instance;
         public AnimationClip Clip { get; private set; }
         public EditorCurveBinding[] Bindings { get; private set; }
+        public string RootNormalizationIdentity { get; private set; } = "";
         Transform[] bones;
         Vector3[] restPositions;
         Quaternion[] restRotations;
@@ -51,6 +52,14 @@ namespace AnimationSystemDOTS.Editor.Baking
                 restScales = bones.Select(b => b.localScale).ToArray();
                 rootInverse = Matrix4x4.TRS(restPositions[0], restRotations[0], restScales[0]).inverse;
                 rootAnimated = Bindings.Any(b => string.IsNullOrEmpty(b.path));
+                if (rootAnimated)
+                {
+                    var p = restPositions[0]; var r = restRotations[0]; var s = restScales[0];
+                    RootNormalizationIdentity = "|root-basis:" + string.Join(",", new[]
+                    {
+                        p.x, p.y, p.z, r.x, r.y, r.z, r.w, s.x, s.y, s.z
+                    }.Select(BakeContentKey.Float));
+                }
                 // Native SampleAnimation supplies defaults for missing vector channels, rather
                 // than our rig's rest values. Complete the private clip's TRS bindings explicitly.
                 CompleteRestBindings(rig);

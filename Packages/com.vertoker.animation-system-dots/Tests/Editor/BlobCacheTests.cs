@@ -47,6 +47,42 @@ namespace AnimationSystemDOTS.Tests
         }
 
         [Test]
+        public void Cache_ChangingFullyBoundRootBasisInvalidatesNormalizedRootTrack()
+        {
+            foreach (var property in new[] { "m_LocalPosition.x", "m_LocalPosition.y", "m_LocalPosition.z",
+                "m_LocalRotation.x", "m_LocalRotation.y", "m_LocalRotation.z", "m_LocalRotation.w",
+                "m_LocalScale.x", "m_LocalScale.y", "m_LocalScale.z" })
+            {
+                var value = property == "m_LocalRotation.w" || property.StartsWith("m_LocalScale") ? 1 : 0;
+                clip.SetCurve("", typeof(Transform), property, AnimationCurve.Constant(0, 1, value));
+            }
+            clip.SetCurve("", typeof(Transform), "m_LocalPosition.x", AnimationCurve.Linear(0, 2, 1, 4));
+            var oldKey = FirstBake();
+            source.transform.localPosition = new Vector3(10, 0, 0);
+            // Root placement belongs to the ECS entity, so the rig-space skeleton remains identical.
+            var nextRig = RigBakePipeline.Bake(source);
+            try { Assert.That(nextRig.Rig.Value.ContentKey, Is.EqualTo(rig.Value.ContentKey)); }
+            finally { nextRig.Rig.Dispose(); }
+            var result = ClipBakePipeline.Bake(CachedRequest());
+            try
+            {
+                Assert.That(result.Success, Is.True, string.Join("\n", result.Diagnostics));
+                Assert.That(result.ContentKey, Is.Not.EqualTo(oldKey), "Root normalization basis is an input to sampled clip data.");
+                Assert.That(result.FromCache, Is.False);
+                Assert.That(ClipSampler.SampleBone(ref result.Clip.Value, 0, 0.5).Position.x, Is.EqualTo(-7).Within(1e-5));
+            }
+            finally { if (result.Clip.IsCreated) result.Clip.Dispose(); }
+            var uncached = ClipBakePipeline.Bake(Request());
+            try
+            {
+                Assert.That(uncached.Success, Is.True, string.Join("\n", uncached.Diagnostics));
+                Assert.That(uncached.ContentKey, Is.EqualTo(result.ContentKey));
+                Assert.That(ClipSampler.SampleBone(ref uncached.Clip.Value, 0, 0.5).Position.x, Is.EqualTo(-7).Within(1e-5));
+            }
+            finally { if (uncached.Clip.IsCreated) uncached.Clip.Dispose(); }
+        }
+
+        [Test]
         public void Cache_ReusesVerifiedDiskBlobAfterTheFirstResultIsDisposed()
         {
             var key = FirstBake();
