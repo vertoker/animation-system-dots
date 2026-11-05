@@ -1,7 +1,20 @@
 {
   "name": "AnimationSystemDOTS.Tests.Runtime",
   "rootNamespace": "AnimationSystemDOTS.Tests",
-  "references": ["AnimationSystemDOTS.Core", "Unity.Entities", "Unity.Collections", "Unity.Mathematics", "Unity.Burst"],
-  "optionalUnityReferences": ["TestAssemblies"],
+  "references": [
+    "AnimationSystemDOTS.Core",
+    "AnimationSystemDOTS.Rendering",
+    "Unity.Entities",
+    "Unity.Transforms",
+    "Unity.Entities.Graphics",
+    "Unity.Deformations",
+    "Unity.Collections",
+    "Unity.Mathematics",
+    "Unity.Burst",
+    "Unity.Mathematics.Extensions"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
   "allowUnsafeCode": true
 }

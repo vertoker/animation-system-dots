@@ -20,6 +20,8 @@ namespace AnimationSystemDOTS.Editor.Baking
             var rig = default(BlobAssetReference<RigDefinitionBlob>);
             var library = default(BlobAssetReference<AnimationLibraryBlob>);
             var clips = new List<BlobAssetReference<AnimationClipBlob>>();
+            var meshBindings = new List<BlobAssetReference<SkinnedMeshBindingBlob>>();
+            var meshInputs = new List<SkinnedMeshBindingBakingData>();
             var ownsRig = false;
             var ownsLibrary = false;
             try
@@ -44,6 +46,22 @@ namespace AnimationSystemDOTS.Editor.Baking
                 var libraryResult = LibraryBakePipeline.Build(rig, clips);
                 if (!libraryResult.Success) throw new ArgumentException(string.Join("\n", libraryResult.Diagnostics));
                 library = libraryResult.Library; ownsLibrary = true;
+                foreach (var renderer in GetComponentsInChildren<SkinnedMeshRenderer>())
+                {
+                    DependsOn(renderer); DependsOn(renderer.sharedMesh);
+                    var root = renderer.rootBone != null ? renderer.rootBone : renderer.transform;
+                    GetComponent<Transform>(root);
+                    foreach (var bone in renderer.bones) if (bone != null) GetComponent<Transform>(bone);
+                    foreach (var material in renderer.sharedMaterials) DependsOn(material);
+                    var binding = SkinnedMeshBindingBakePipeline.Build(authoring.gameObject, renderer, rig, library);
+                    meshBindings.Add(binding);
+                    meshInputs.Add(new SkinnedMeshBindingBakingData
+                    {
+                        Mesh = GetEntity(renderer.gameObject, TransformUsageFlags.Dynamic),
+                        DeformationRoot = GetEntity(root.gameObject, TransformUsageFlags.Dynamic),
+                        RendererId = renderer.GetEntityId(), Binding = binding
+                    });
+                }
                 // AddBlobAsset may deduplicate and replace these references. From this
                 // point Unity's blob store owns them, including across incremental rebakes.
                 AddBlobAsset(ref rig, out _); ownsRig = false;
@@ -59,6 +77,13 @@ namespace AnimationSystemDOTS.Editor.Baking
                 var local = AddBuffer<BoneLocalPose>(entity);
                 for (var bone = 0; bone < rig.Value.RestLocalPoses.Length; bone++) local.Add(rig.Value.RestLocalPoses[bone]);
                 AddBuffer<BoneModelPose>(entity);
+                var skinInputs = AddBuffer<SkinnedMeshBindingBakingData>(entity);
+                for (var i = 0; i < meshInputs.Count; i++)
+                {
+                    var input = meshInputs[i]; var blob = input.Binding;
+                    AddBlobAsset(ref blob, out _); meshBindings[i] = default;
+                    input.Binding = blob; skinInputs.Add(input);
+                }
             }
             catch (ArgumentException exception)
             {
@@ -67,6 +92,7 @@ namespace AnimationSystemDOTS.Editor.Baking
             finally
             {
                 foreach (var clip in clips) if (clip.IsCreated) clip.Dispose();
+                foreach (var binding in meshBindings) if (binding.IsCreated) binding.Dispose();
                 if (ownsLibrary && library.IsCreated) library.Dispose();
                 if (ownsRig && rig.IsCreated) rig.Dispose();
             }

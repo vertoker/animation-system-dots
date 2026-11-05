@@ -1,6 +1,20 @@
 {
   "name": "AnimationSystemDOTS.Editor",
   "rootNamespace": "AnimationSystemDOTS.Editor",
-  "references": ["AnimationSystemDOTS.Core", "AnimationSystemDOTS.Authoring", "AnimationSystemDOTS.Rendering", "Unity.Entities", "Unity.Entities.Hybrid", "Unity.Collections", "Unity.Mathematics"],
-  "includePlatforms": ["Editor"]
+  "references": [
+    "AnimationSystemDOTS.Core",
+    "AnimationSystemDOTS.Authoring",
+    "AnimationSystemDOTS.Rendering",
+    "Unity.Entities",
+    "Unity.Entities.Hybrid",
+    "Unity.Transforms",
+    "Unity.Entities.Graphics",
+    "Unity.Deformations",
+    "Unity.Collections",
+    "Unity.Mathematics",
+    "Unity.Mathematics.Extensions"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
 }
