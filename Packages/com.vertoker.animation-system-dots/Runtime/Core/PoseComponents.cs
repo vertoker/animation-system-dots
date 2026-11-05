@@ -11,6 +11,14 @@ namespace AnimationSystemDOTS
         public static BoneLocalPose Identity => new BoneLocalPose { Rotation = quaternion.identity, Scale = new float3(1) };
     }
 
+    public struct BoneModelPose : IBufferElementData { public float3x4 Matrix; }
+    // Per-rig scratch, request-major then bone-major. Never shared between rig entities.
+    public struct SampledBonePose : IBufferElementData
+    {
+        public BoneLocalPose Pose;
+        public byte IsValid;
+    }
+
     public static class PoseValidation
     {
         public static bool IsValid(in BoneLocalPose pose)

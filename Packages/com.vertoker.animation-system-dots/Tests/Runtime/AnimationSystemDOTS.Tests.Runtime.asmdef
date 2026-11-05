@@ -1,0 +1,7 @@
+{
+  "name": "AnimationSystemDOTS.Tests.Runtime",
+  "rootNamespace": "AnimationSystemDOTS.Tests",
+  "references": ["AnimationSystemDOTS.Core", "Unity.Entities", "Unity.Collections", "Unity.Mathematics", "Unity.Burst"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "allowUnsafeCode": true
+}

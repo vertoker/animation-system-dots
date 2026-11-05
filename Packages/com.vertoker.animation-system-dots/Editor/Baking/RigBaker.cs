@@ -48,7 +48,17 @@ namespace AnimationSystemDOTS.Editor.Baking
                 // point Unity's blob store owns them, including across incremental rebakes.
                 AddBlobAsset(ref rig, out _); ownsRig = false;
                 AddBlobAsset(ref library, out _); ownsLibrary = false;
-                AddComponent(GetEntity(TransformUsageFlags.Dynamic), new AnimationRig { Rig = rig, Library = library });
+                var entity = GetEntity(TransformUsageFlags.Dynamic);
+                AddComponent(entity, new AnimationRig { Rig = rig, Library = library });
+                AddComponent(entity, new AnimationClock());
+                AddComponent(entity, new AnimationPlaybackMode());
+                AddComponent(entity, ClipPlaybackState.Initial);
+                AddBuffer<ScriptedPlaybackCommand>(entity);
+                AddBuffer<AnimationClipRequest>(entity);
+                AddBuffer<SampledBonePose>(entity);
+                var local = AddBuffer<BoneLocalPose>(entity);
+                for (var bone = 0; bone < rig.Value.RestLocalPoses.Length; bone++) local.Add(rig.Value.RestLocalPoses[bone]);
+                AddBuffer<BoneModelPose>(entity);
             }
             catch (ArgumentException exception)
             {

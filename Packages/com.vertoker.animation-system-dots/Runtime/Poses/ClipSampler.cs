@@ -14,7 +14,10 @@ namespace AnimationSystemDOTS
             var time = unwrappedTime;
             if (clip.IsLooping != 0)
             {
-                time -= math.floor(time / clip.Duration) * clip.Duration;
+                // Remainder avoids overflowing time / duration for finite huge times
+                // and tiny clips; floor-based reduction can produce infinity/NaN.
+                time %= clip.Duration;
+                if (time < 0) time += clip.Duration;
                 // Preserve the authored endpoint at an exact positive loop boundary.
                 if (time == 0 && unwrappedTime > 0) time = clip.Duration;
             }

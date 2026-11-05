@@ -10,7 +10,7 @@ Version: 0.1.0 development. The implementation plan is `PLAN.md` at the project 
 | Reference inventory | implemented | HTML SHA-256; 349 visible paths / 878 declared |
 | Isolated Generic Editor oracle | implemented | OracleCaptureTests/OracleFixtureTests: 10/10; native event/cleanup gate: 1/1; see Oracle.md |
 | Generic rig, clip/library baking and cache | experimental | Full Editor suite 37/37; public SubScene load, live rebake/removal, cold-Editor disk reuse; mesh/mask/controller data are completed in their consuming stages |
-| ECS CPU playback and blending | unsupported | ScriptedPlaybackTests, PoseSamplingTests; stage 2 |
+| ECS CPU playback and blending | experimental | 31/31 Runtime + 40/40 Editor; explicit ticks, sampling/blending/masks, affine poses, prefab/two-World/no-domain-reload lifecycle; see Runtime.md |
 | Entities Graphics skinning | unsupported | Offscreen rendering, palettes, roots, multi-slot mesh; stage 3 |
 | Controller state machine | unsupported | Parameters, transition traces; stage 4 |
 | Layers, masks, five blend-tree modes | unsupported | Differential controller tests; stage 5 |
