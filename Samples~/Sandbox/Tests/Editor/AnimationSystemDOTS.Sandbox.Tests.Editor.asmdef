@@ -1,0 +1,27 @@
+{
+  "name": "AnimationSystemDOTS.Sandbox.Tests.Editor",
+  "references": [
+    "AnimationSystemDOTS.Sandbox",
+    "AnimationSystemDOTS.Core",
+    "Unity.Entities",
+    "Unity.Transforms",
+    "Unity.Collections",
+    "Unity.Mathematics"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.unity.test-framework",
+      "expression": "1.0.0",
+      "define": "ANIMATION_SYSTEM_DOTS_SAMPLE_TESTS"
+    }
+  ],
+  "defineConstraints": [
+    "ANIMATION_SYSTEM_DOTS_SAMPLE_TESTS"
+  ]
+}

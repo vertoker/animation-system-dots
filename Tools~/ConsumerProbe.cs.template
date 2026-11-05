@@ -1,0 +1,97 @@
+using System;
+using System.IO;
+using System.Linq;
+using AnimationSystemDOTS;
+using AnimationSystemDOTS.Editor;
+using AnimationSystemDOTS.Rendering;
+using Unity.Collections;
+using Unity.Entities;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+
+[InitializeOnLoad]
+static class ConsumerProbe
+{
+    const string Key = "AnimationSystemDOTS.ConsumerProbe.";
+    [Serializable] class Report
+    {
+        public string mode, sampleRoot, error;
+        public int characters, palettes, renderEntities, nativeAnimators;
+        public bool samplesInitiallyExcluded, sampleImported, sourcePathsWritable, passed;
+    }
+    static Report report;
+    static double deadline;
+    static int settledFrames;
+    static ConsumerProbe() { EditorApplication.update += Update; deadline = EditorApplication.timeSinceStartup + 240; }
+    static void Update()
+    {
+        if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode != EditorApplication.isPlaying) return;
+        try
+        {
+            if (EditorApplication.timeSinceStartup > deadline) throw new TimeoutException("Consumer verification timed out.");
+            int step = SessionState.GetInt(Key + "Step", 0);
+            if (step == 0)
+            {
+                report = new Report { mode = "__MODE__" };
+                report.samplesInitiallyExcluded = !UnityEditor.Compilation.CompilationPipeline.GetAssemblies(UnityEditor.Compilation.AssembliesType.Editor).Any(a => a.name.StartsWith("AnimationSystemDOTS.Sandbox"));
+                if (!report.samplesInitiallyExcluded) throw new Exception("Sandbox code compiled before importing the sample.");
+                SessionState.SetString(Key + "Report", JsonUtility.ToJson(report));
+                SessionState.SetInt(Key + "Step", 1);
+                if (report.mode == "UPM")
+                {
+                    var info = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(AnimationRig).Assembly);
+                    var sample = UnityEditor.PackageManager.UI.Sample.FindByPackage(info.name, info.version).Single();
+                    if (!sample.Import(UnityEditor.PackageManager.UI.Sample.ImportOptions.None)) throw new Exception("UPM sample import returned false.");
+                }
+                else PackageSamples.ImportSandbox();
+                return;
+            }
+            if (report == null) report = JsonUtility.FromJson<Report>(SessionState.GetString(Key + "Report", "{}"));
+            if (step == 1)
+            {
+                var marker = AssetDatabase.GUIDToAssetPath("90e73d0213914c0caa70529fcbcb2f13");
+                if (string.IsNullOrEmpty(marker)) return;
+                report.sampleRoot = marker.Substring(0, marker.LastIndexOf('/') + 1);
+                var type = TypeCache.GetMethodsWithAttribute<MenuItem>().Select(m => m.DeclaringType).FirstOrDefault(t => t.FullName == "AnimationSystemDOTS.Sandbox.Editor.HumanoidCrowdFixtures");
+                if (type == null) return;
+                if ((string)type.GetField("ScenePath").GetValue(null) != report.sampleRoot + "Scenes/04_HumanoidCrowd1000.unity") throw new Exception("Sample tools resolved the wrong import path.");
+                report.sampleImported = true;
+                report.sourcePathsWritable = report.sampleRoot.StartsWith("Assets/") && AssetImporter.GetAtPath(report.sampleRoot + "Humanoid/Model/BaldMale.fbx") != null;
+                EditorSceneManager.OpenScene(report.sampleRoot + "Scenes/04_HumanoidCrowd1000.unity");
+                SessionState.SetString(Key + "Report", JsonUtility.ToJson(report));
+                SessionState.SetInt(Key + "Step", 2);
+                Application.runInBackground = true; EditorApplication.isPlaying = true;
+                return;
+            }
+            if (step == 2 && EditorApplication.isPlaying)
+            {
+                var world = World.DefaultGameObjectInjectionWorld;
+                if (world == null || !world.IsCreated) return;
+                var em = world.EntityManager;
+                using (var rigs = em.CreateEntityQuery(typeof(AnimationRig), typeof(ClipPlaybackState))) report.characters = rigs.CalculateEntityCount();
+                if (report.characters != 1000) return;
+                using (var palettes = em.CreateEntityQuery(typeof(SkinMatrixPublication))) report.palettes = palettes.CalculateEntityCount();
+                using (var renders = em.CreateEntityQuery(typeof(AnimatedRenderBinding))) report.renderEntities = renders.CalculateEntityCount();
+                report.nativeAnimators = UnityEngine.Object.FindObjectsByType<Animator>().Length;
+                report.passed = report.samplesInitiallyExcluded && report.sampleImported && report.sourcePathsWritable
+                    && report.characters == 1000 && report.palettes == 3000 && report.renderEntities == 3000 && report.nativeAnimators == 0;
+                SessionState.SetString(Key + "Report", JsonUtility.ToJson(report));
+                SessionState.SetInt(Key + "Step", 3); EditorApplication.isPlaying = false; return;
+            }
+            if (step == 3 && !EditorApplication.isPlaying)
+            {
+                if (++settledFrames < 12) return;
+                File.WriteAllText("consumer-result.json", JsonUtility.ToJson(report, true));
+                EditorApplication.update -= Update; EditorApplication.Exit(report.passed ? 0 : 4);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (report == null) report = new Report { mode = "__MODE__" };
+            report.error = ex.ToString(); report.passed = false;
+            File.WriteAllText("consumer-result.json", JsonUtility.ToJson(report, true));
+            Debug.LogException(ex); EditorApplication.update -= Update; EditorApplication.Exit(5);
+        }
+    }
+}

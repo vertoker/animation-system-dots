@@ -1,0 +1,26 @@
+{
+  "name": "AnimationSystemDOTS.Tests.Editor",
+  "rootNamespace": "AnimationSystemDOTS.Tests",
+  "references": [
+    "AnimationSystemDOTS.Core",
+    "AnimationSystemDOTS.Authoring",
+    "AnimationSystemDOTS.Rendering",
+    "AnimationSystemDOTS.Editor",
+    "Unity.Entities",
+    "Unity.Transforms",
+    "Unity.Entities.Graphics",
+    "Unity.Deformations",
+    "Unity.Collections",
+    "Unity.Mathematics",
+    "Unity.Scenes",
+    "Unity.Scenes.Editor",
+    "Unity.Mathematics.Extensions",
+    "AnimationSystemDOTS.Sandbox.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}
