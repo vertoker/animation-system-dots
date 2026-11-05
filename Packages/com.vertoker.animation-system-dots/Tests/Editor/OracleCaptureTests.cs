@@ -201,7 +201,14 @@ namespace AnimationSystemDOTS.Tests
             Assert.That(EditorJsonUtility.ToJson(clip), Is.EqualTo(before));
             Assert.That(result.EventsCaptured, Is.True);
             Assert.That(JsonUtility.ToJson(UnityAnimationOracle.Capture(request)), Is.EqualTo(JsonUtility.ToJson(result)));
-            yield return null; // Advance the real Player loop before checking native reclamation.
+            // Scene unloading and graph destruction may complete on different native frames.
+            for (var frame = 0; frame < 120; frame++)
+            {
+                var pendingGraphs = UnityEditor.Playables.Utility.GetAllGraphs().Count(g => g.GetEditorName() == "AnimationSystemDOTS Oracle");
+                var pendingScenes = Enumerable.Range(0, SceneManager.sceneCount).Select(SceneManager.GetSceneAt).Count(s => s.name.StartsWith("AnimationSystemDOTS Oracle Events"));
+                if (pendingGraphs == 0 && pendingScenes == 0) break;
+                yield return null;
+            }
             Assert.That(UnityEditor.Playables.Utility.GetAllGraphs().Count(g => g.GetEditorName() == "AnimationSystemDOTS Oracle"), Is.Zero);
             Assert.That(Enumerable.Range(0, SceneManager.sceneCount).Select(SceneManager.GetSceneAt).Count(s => s.name.StartsWith("AnimationSystemDOTS Oracle Events")), Is.Zero);
             TearDown();
