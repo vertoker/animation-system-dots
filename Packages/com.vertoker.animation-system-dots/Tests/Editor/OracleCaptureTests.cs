@@ -201,18 +201,35 @@ namespace AnimationSystemDOTS.Tests
             Assert.That(EditorJsonUtility.ToJson(clip), Is.EqualTo(before));
             Assert.That(result.EventsCaptured, Is.True);
             Assert.That(JsonUtility.ToJson(UnityAnimationOracle.Capture(request)), Is.EqualTo(JsonUtility.ToJson(result)));
-            // Scene unloading and graph destruction may complete on different native frames.
-            for (var frame = 0; frame < 120; frame++)
-            {
-                var pendingGraphs = UnityEditor.Playables.Utility.GetAllGraphs().Count(g => g.GetEditorName() == "AnimationSystemDOTS Oracle");
-                var pendingScenes = Enumerable.Range(0, SceneManager.sceneCount).Select(SceneManager.GetSceneAt).Count(s => s.name.StartsWith("AnimationSystemDOTS Oracle Events"));
-                if (pendingGraphs == 0 && pendingScenes == 0) break;
-                yield return null;
-            }
-            Assert.That(UnityEditor.Playables.Utility.GetAllGraphs().Count(g => g.GetEditorName() == "AnimationSystemDOTS Oracle"), Is.Zero);
-            Assert.That(Enumerable.Range(0, SceneManager.sceneCount).Select(SceneManager.GetSceneAt).Count(s => s.name.StartsWith("AnimationSystemDOTS Oracle Events")), Is.Zero);
+            yield return AwaitNativeCleanup();
             TearDown();
             yield return new ExitPlayMode();
+        }
+
+        static IEnumerator AwaitNativeCleanup()
+        {
+            var previousBackground = Application.runInBackground;
+            var startFrame = Time.frameCount;
+            var elapsed = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                // Editor test coroutine iterations are not necessarily native PlayerLoop
+                // frames when the unfocused Editor pauses the player. Enable advancement
+                // temporarily and budget actual frames, with a separate wall-clock bound.
+                Application.runInBackground = true;
+                while (Time.frameCount - startFrame < 120 && elapsed.Elapsed.TotalSeconds < 10)
+                {
+                    var graphs = UnityEditor.Playables.Utility.GetAllGraphs().Count(g => g.GetEditorName() == "AnimationSystemDOTS Oracle");
+                    var scenes = Enumerable.Range(0, SceneManager.sceneCount).Select(SceneManager.GetSceneAt).Count(s => s.name.StartsWith("AnimationSystemDOTS Oracle Events"));
+                    if (graphs == 0 && scenes == 0) break;
+                    yield return null;
+                }
+                var context = "PlayerLoop frames advanced=" + (Time.frameCount - startFrame) + "; elapsed=" + elapsed.Elapsed.TotalSeconds;
+                TestContext.WriteLine("Native cleanup: " + context);
+                Assert.That(UnityEditor.Playables.Utility.GetAllGraphs().Count(g => g.GetEditorName() == "AnimationSystemDOTS Oracle"), Is.Zero, context);
+                Assert.That(Enumerable.Range(0, SceneManager.sceneCount).Select(SceneManager.GetSceneAt).Count(s => s.name.StartsWith("AnimationSystemDOTS Oracle Events")), Is.Zero, context);
+            }
+            finally { Application.runInBackground = previousBackground; }
         }
     }
 }
