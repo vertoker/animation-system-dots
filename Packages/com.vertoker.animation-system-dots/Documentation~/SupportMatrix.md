@@ -9,7 +9,7 @@ Version: 0.1.0 development. The implementation plan is `PLAN.md` at the project 
 | Project dependencies and Coplay MCP | implemented | Live target project/version, lockfile, compilation |
 | Reference inventory | implemented | HTML SHA-256; 349 visible paths / 878 declared |
 | Isolated Generic Editor oracle | implemented | OracleCaptureTests/OracleFixtureTests: 10/10; native event/cleanup gate: 1/1; see Oracle.md |
-| Generic rig and clip baking | unsupported | RigBakingTests, ClipBakingTests, BlobCacheTests; stage 1 |
+| Generic rig and standalone clip baking | experimental | RigBakingTests/ClipBakingTests/BlobCacheTests pass; library/Baker/cold-Editor integration remains open in stage 1 |
 | ECS CPU playback and blending | unsupported | ScriptedPlaybackTests, PoseSamplingTests; stage 2 |
 | Entities Graphics skinning | unsupported | Offscreen rendering, palettes, roots, multi-slot mesh; stage 3 |
 | Controller state machine | unsupported | Parameters, transition traces; stage 4 |

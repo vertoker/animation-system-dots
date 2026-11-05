@@ -3,7 +3,7 @@ using UnityEngine;
 namespace AnimationSystemDOTS.Authoring
 {
     [CreateAssetMenu(menuName = "Animation System DOTS/Validation Settings")]
-    public sealed class AnimationValidationSettings : ScriptableObject
+    public class AnimationValidationSettings : ScriptableObject
     {
         [Min(1)] public int SampleRate = 30;
         [Min(0)] public float PositionTolerance = 0.0001f;
