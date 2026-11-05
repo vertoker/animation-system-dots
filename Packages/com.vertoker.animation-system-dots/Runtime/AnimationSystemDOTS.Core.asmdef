@@ -1,0 +1,6 @@
+{
+  "name": "AnimationSystemDOTS.Core",
+  "rootNamespace": "AnimationSystemDOTS",
+  "references": ["Unity.Entities", "Unity.Transforms", "Unity.Collections", "Unity.Mathematics", "Unity.Burst"],
+  "allowUnsafeCode": true
+}

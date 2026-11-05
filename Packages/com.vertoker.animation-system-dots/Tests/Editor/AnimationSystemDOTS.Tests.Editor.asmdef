@@ -1,0 +1,7 @@
+{
+  "name": "AnimationSystemDOTS.Tests.Editor",
+  "rootNamespace": "AnimationSystemDOTS.Tests",
+  "references": ["AnimationSystemDOTS.Core", "AnimationSystemDOTS.Authoring", "AnimationSystemDOTS.Rendering", "AnimationSystemDOTS.Editor", "Unity.Entities", "Unity.Collections", "Unity.Mathematics"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"]
+}

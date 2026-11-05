@@ -1,0 +1,5 @@
+{
+  "name": "AnimationSystemDOTS.Rendering",
+  "rootNamespace": "AnimationSystemDOTS.Rendering",
+  "references": ["AnimationSystemDOTS.Core", "Unity.Entities", "Unity.Transforms", "Unity.Entities.Graphics", "Unity.Deformations", "Unity.Collections", "Unity.Mathematics", "Unity.Burst"]
+}
