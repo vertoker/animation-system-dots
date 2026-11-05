@@ -109,6 +109,29 @@ namespace AnimationSystemDOTS.Tests
         }
 
         [Test]
+        public void Bake_RejectsOptimizedAwaySkeletonWithActionableDiagnostic()
+        {
+            Child("Bone", source.transform);
+            var animator = source.AddComponent<Animator>();
+            var avatar = AvatarBuilder.BuildGenericAvatar(source, "");
+            try
+            {
+                Assert.That(avatar.isValid, Is.True);
+                animator.avatar = avatar;
+                AnimatorUtility.OptimizeTransformHierarchy(source, Array.Empty<string>());
+                Assert.That(animator.hasTransformHierarchy, Is.False, "Fixture must exercise an actual optimized hierarchy.");
+                var result = RigBakePipeline.Bake(source);
+                try
+                {
+                    Assert.That(result.Success, Is.False);
+                    Assert.That(string.Join("\n", result.Diagnostics), Does.Contain("Optimize Game Objects").And.Contain("unoptimized"));
+                }
+                finally { if (result.Rig.IsCreated) result.Rig.Dispose(); }
+            }
+            finally { UnityEngine.Object.DestroyImmediate(avatar); }
+        }
+
+        [Test]
         public void PoseValidation_RejectsNonFiniteAndDegenerateData()
         {
             var pose = BoneLocalPose.Identity;

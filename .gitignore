@@ -127,3 +127,7 @@ __pycache__/
 
 # Generated verification XML, logs and captured oracle reports
 /Artifacts/
+
+# Entities-generated scene importer dependency keys
+/Assets/SceneDependencyCache/
+/Assets/SceneDependencyCache.meta

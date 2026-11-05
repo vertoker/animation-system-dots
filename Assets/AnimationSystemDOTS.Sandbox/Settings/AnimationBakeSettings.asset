@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ca7429b5fd298b54f85308d8f874709e, type: 3}
+  m_Name: AnimationBakeSettings
+  m_EditorClassIdentifier: AnimationSystemDOTS.Authoring::AnimationSystemDOTS.Authoring.AnimationBakeSettings
+  SampleRate: 30
+  PositionTolerance: 0.0001
+  AngleToleranceDegrees: 0.01
+  ScaleTolerance: 0.0001
+  ScalarTolerance: 0.0001
+  CaptureTimes:
+  - 0
+  - 0.25
+  - 0.5
+  - 0.75
+  - 1
+  FixtureRevision: generic-two-bone-1
+  MaximumSamplesPerClip: 65536
