@@ -34,7 +34,10 @@ namespace AnimationSystemDOTS.Editor.Baking
                 var root = Path.GetFullPath(directory);
                 var indexPath = Path.Combine(root, key + ".json");
                 if (!File.Exists(indexPath)) return false;
-                var entry = JsonUtility.FromJson<Entry>(File.ReadAllText(indexPath));
+                string index;
+                using (var input = new FileStream(indexPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
+                using (var reader = new StreamReader(input)) index = reader.ReadToEnd();
+                var entry = JsonUtility.FromJson<Entry>(index);
                 if (entry == null || entry.Schema != AnimationBakeVersion.Schema || entry.ContentKey != key
                     || entry.UnityVersion != Application.unityVersion || !IsDigest(entry.PayloadHash)) return false;
                 var payload = Path.Combine(root, "payload-" + entry.PayloadHash + ".blob");
@@ -127,7 +130,7 @@ namespace AnimationSystemDOTS.Editor.Baking
                     }
                     return;
                 }
-                catch (IOException exception) when (attempt < 7 && IsSharingConflict(exception))
+                catch (IOException exception) when (attempt < 9 && IsTransientPublicationConflict(exception, source, destination))
                 {
                     // Windows readers can briefly deny delete/rename sharing. Bound the
                     // retry; disk, permission and unrelated I/O failures still propagate.
@@ -135,10 +138,12 @@ namespace AnimationSystemDOTS.Editor.Baking
                 }
             }
         }
-        static bool IsSharingConflict(IOException exception)
+        static bool IsTransientPublicationConflict(IOException exception, string source, string destination)
         {
             var code = exception.HResult & 0xffff;
-            return code == 32 || code == 33;
+            // ReplaceFile can report ERROR_UNABLE_TO_REMOVE_REPLACED instead of
+            // a sharing violation. Retry only while both original files still exist.
+            return code == 32 || code == 33 || code == 1175 && File.Exists(source) && File.Exists(destination);
         }
 
         static void DeleteTemporary(string path)
@@ -150,7 +155,7 @@ namespace AnimationSystemDOTS.Editor.Baking
 
         static string HashFile(string path)
         {
-            using (var input = File.OpenRead(path))
+            using (var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
             using (var sha = SHA256.Create())
                 return BitConverter.ToString(sha.ComputeHash(input)).Replace("-", "").ToLowerInvariant();
         }
