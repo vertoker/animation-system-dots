@@ -182,6 +182,73 @@ namespace AnimationSystemDOTS.Tests
         }
 
         int SkinCount() { using (var q = world.EntityManager.CreateEntityQuery(typeof(AnimationSystemDOTS.Rendering.SkinnedMeshBinding))) return q.CalculateEntityCount(); }
+
+        [UnityTest]
+        public IEnumerator SubScene_BakesControllerClipsDefaultsAndControllerPlaybackMode()
+        {
+            var source = CreateSkinFixture();
+            var clips = source.GetComponent<AnimationLibraryAuthoring>().Clips;
+            var controller = UnityEditor.Animations.AnimatorController.CreateAnimatorControllerAtPath(folder + "/Controller.controller");
+            controller.AddParameter(new AnimatorControllerParameter { name = "Speed", type = AnimatorControllerParameterType.Float, defaultFloat = 1.5f });
+            var state = controller.layers[0].stateMachine.AddState("Move"); state.motion = clips[0]; state.writeDefaultValues = false;
+            controller.layers[0].stateMachine.defaultState = state;
+            // Controller source alone must collect its clips; a manual library list is optional.
+            source.GetComponent<AnimationLibraryAuthoring>().Clips = System.Array.Empty<AnimationClip>();
+            source.AddComponent<AnimationControllerAuthoring>().Controller = controller;
+            var path = folder + "/Controller.unity";
+            Assert.That(EditorSceneManager.SaveScene(authoringScene, path), Is.True);
+            if (SceneManager.sceneCount == 1) EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
+            EditorSceneManager.CloseScene(authoringScene, true);
+            if (originalScene.IsValid() && originalScene.isLoaded) SceneManager.SetActiveScene(originalScene);
+            CreateWorld(false, true);
+            var scene = SceneSystem.LoadSceneAsync(world.Unmanaged, new Unity.Entities.Hash128(AssetDatabase.AssetPathToGUID(path)),
+                new SceneSystem.LoadParameters { Flags = SceneLoadFlags.BlockOnImport | SceneLoadFlags.BlockOnStreamIn });
+            yield return WaitUntil(() => SceneSystem.IsSceneLoaded(world.Unmanaged, scene), "Controller SubScene did not load.");
+            using (var query = world.EntityManager.CreateEntityQuery(typeof(AnimationRig)))
+            {
+                var entity = query.GetSingletonEntity(); var em = world.EntityManager;
+                Assert.That(em.HasComponent<AnimationController>(entity), Is.True, "RigBaker did not publish controller data.");
+                Assert.That(em.GetComponentData<AnimationPlaybackMode>(entity).Value, Is.EqualTo(PlaybackDriver.Controller));
+                Assert.That(em.GetComponentData<AnimationRig>(entity).Library.Value.Clips.Length, Is.EqualTo(1));
+                Assert.That(em.GetBuffer<AnimationParameterValue>(entity)[0].Float, Is.EqualTo(1.5f));
+                var step = em.CreateEntity(typeof(AnimationStepContext)); em.SetComponentData(step, new AnimationStepContext { Tick = 1, DeltaTime = .25 });
+                world.Update(); em.CompleteAllTrackedJobs();
+                Assert.That(em.GetComponentData<ControllerLayerState>(entity).Initialized, Is.EqualTo(1));
+                Assert.That(em.GetBuffer<AnimationClipRequest>(entity).Length, Is.EqualTo(1));
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator SubScene_LiveControllerAssetChangesAndRemovalRetractAllDerivedData()
+        {
+            var source = CreateSkinFixture(); var clip = source.GetComponent<AnimationLibraryAuthoring>().Clips[0];
+            var controller = UnityEditor.Animations.AnimatorController.CreateAnimatorControllerAtPath(folder + "/LiveController.controller");
+            controller.AddParameter(new AnimatorControllerParameter { name = "Speed", type = AnimatorControllerParameterType.Float, defaultFloat = 1 });
+            var state = controller.layers[0].stateMachine.AddState("Move"); state.motion = clip; state.writeDefaultValues = false;
+            controller.layers[0].stateMachine.defaultState = state;
+            source.AddComponent<AnimationControllerAuthoring>().Controller = controller;
+            Assert.That(EditorSceneManager.SaveScene(authoringScene, folder + "/LiveController.unity"), Is.True);
+            Unity.Scenes.Editor.LiveConversionEditorSettings.LiveConversionEnabled = true; CreateWorld(true);
+            SceneSystem.LoadSceneAsync(world.Unmanaged, new Unity.Entities.Hash128(AssetDatabase.AssetPathToGUID(folder + "/LiveController.unity")));
+            using (var query = world.EntityManager.CreateEntityQuery(typeof(AnimationController)))
+            {
+                yield return WaitUntil(() => query.CalculateEntityCount() == 1, "Initial live controller bake failed.");
+                var parameters = controller.parameters; parameters[0].defaultFloat = 2; controller.parameters = parameters;
+                EditorUtility.SetDirty(controller); AssetDatabase.SaveAssets();
+                yield return WaitUntil(() => query.CalculateEntityCount() == 1 && query.GetSingleton<AnimationController>().Definition.Value.Parameters[0].DefaultFloat == 2,
+                    "Controller asset dependency failed to invalidate the baked definition.");
+                Assert.That(world.EntityManager.GetBuffer<AnimationParameterValue>(query.GetSingletonEntity())[0].Float, Is.EqualTo(2));
+                Undo.DestroyObjectImmediate(source.GetComponent<AnimationControllerAuthoring>());
+                yield return WaitUntil(() => query.CalculateEntityCount() == 0, "Removed controller retained its derived component.");
+                using (var rigs = world.EntityManager.CreateEntityQuery(typeof(AnimationRig)))
+                {
+                    var entity = rigs.GetSingletonEntity();
+                    Assert.That(world.EntityManager.HasComponent<ControllerLayerState>(entity), Is.False);
+                    Assert.That(world.EntityManager.HasBuffer<AnimationParameterValue>(entity), Is.False);
+                    Assert.That(world.EntityManager.GetComponentData<AnimationPlaybackMode>(entity).Value, Is.EqualTo(PlaybackDriver.Scripted));
+                }
+            }
+        }
         int RenderCount() { using (var q = world.EntityManager.CreateEntityQuery(typeof(AnimationSystemDOTS.Rendering.AnimatedRenderBinding))) return q.CalculateEntityCount(); }
         int ExportCount() { using (var q = world.EntityManager.CreateEntityQuery(typeof(BoneExportBinding))) return q.CalculateEntityCount(); }
         string MeshBindingKey(int rootIndex)

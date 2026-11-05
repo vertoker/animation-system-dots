@@ -4,6 +4,8 @@
 
 The host supplies exactly one `AnimationStepContext` singleton per World before `AnimationSimulationSystemGroup` updates. Set `Tick`, finite nonnegative `DeltaTime`, `Mode` and `Revision`. Normal ticks must increase; repeated or older normal ticks preserve state and leave queued commands pending. A new Seek revision reevaluates the same tick without advancing time. Replay is an explicit evaluation mode; the caller restores its authoritative state before replaying. Snapshot/prediction integration is stage 11.
 
+For graphs authored in Unity's Animator window, add `AnimationControllerAuthoring` instead of submitting scripted commands. Its selected driver is a parallel Burst state machine sharing immutable definitions across instances. See [controller setup, APIs, supported subset and 1000-instance scene](Controllers.md). Both drivers consume this same explicit clock; `AnimationPlaybackMode` gives requests to exactly one of them.
+
 Queue commands on each rig's `ScriptedPlaybackCommand` buffer before the animation group:
 
 ```csharp

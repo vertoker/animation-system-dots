@@ -5,7 +5,8 @@ namespace AnimationSystemDOTS
 {
     public static class ClipSampler
     {
-        public static BoneLocalPose SampleBone(ref AnimationClipBlob clip, int boneIndex, double unwrappedTime)
+        public static BoneLocalPose SampleBone(ref AnimationClipBlob clip, int boneIndex, double unwrappedTime,
+            ClipLoopBoundary loopBoundary = ClipLoopBoundary.AuthoredEndpoint)
         {
             if ((uint)boneIndex >= (uint)clip.Tracks.Length) throw new ArgumentOutOfRangeException(nameof(boneIndex));
             if (!math.isfinite(unwrappedTime)) throw new ArgumentException("Sample time must be finite.");
@@ -19,7 +20,8 @@ namespace AnimationSystemDOTS
                 time %= clip.Duration;
                 if (time < 0) time += clip.Duration;
                 // Preserve the authored endpoint at an exact positive loop boundary.
-                if (time == 0 && unwrappedTime > 0) time = clip.Duration;
+                if (time == 0 && (loopBoundary == ClipLoopBoundary.End
+                    || loopBoundary == ClipLoopBoundary.AuthoredEndpoint && unwrappedTime > 0)) time = clip.Duration;
             }
             else time = math.clamp(time, 0, clip.Duration);
             var position = time / clip.SampleStep;

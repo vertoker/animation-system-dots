@@ -80,3 +80,12 @@ To repeat that manual comparison in Unity:
 5. Repeat in a Windows Player on the intended graphics backend, saving the backend/device and the frames. The Editor result alone does not close the Player gate. Motion vectors are a separate unclaimed feature.
 
 An automated golden-image fixture remains useful future regression coverage; manual parity acceptance is recorded above. New intra-mesh LOD ranges also need separate validation; the classic LOD capture does not establish their support.
+
+## ECS AnimatorController: ручная проверка
+
+1. Открой `Scenes/02_Controller.unity` из импортированного Validation Sandbox и включи Play. Дождись загрузки SubScene. В overlay должно быть `1000 / 1000`; Walk и Workout автоматически переключаются у разных персонажей, fades меняется.
+2. Нажми **Close** и проверь движения нескольких персонажей. Нажми **All Walk**, затем **All Workout**: после crossfade все должны перейти к выбранному движению. Slider **Speed** меняет скорость, камера **Crowd** показывает всю тысячу. Автоматический режим можно включить обратно.
+3. Останови Play, открой `Fixtures/Crowd.controller` в Animator. Это обычный редактируемый Unity-граф. Измени Duration перехода, сохрани и снова запусти сцену: новая длительность должна прийти через baking. Не включай Write Defaults, IK Pass, дополнительные слои или Interruption Source до реализации их поддержки.
+4. Для своего рига добавь `AnimationRigAuthoring` с settings и `AnimationControllerAuthoring` с `.controller`; список `AnimationLibraryAuthoring.Clips` можно не заполнять. Для Humanoid нужен authoring Animator с корректным Avatar. Ограничения графа и API параметров перечислены в [Controllers.md](Controllers.md).
+
+Автоматически проверены 102 Editor+Sandbox и 45 Runtime тестов, native-трассы состояний/времени/позы, live rebake/removal, 1000 активных контроллеров с одним общим graph blob, 3000 конечных успешных palettes и отсутствие runtime Animator. Editor-скриншоты проверены в `DevProject~/Artifacts/Verification/Controller`; отдельный Player benchmark этой новой сцены пока не выполнен. Замер 0.0346 мс относится только к двум состояниям контроллера на 1000 сущностей, без sampling/skinning/rendering.

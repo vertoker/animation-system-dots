@@ -3,6 +3,7 @@ using Unity.Entities;
 namespace AnimationSystemDOTS
 {
     public enum PoseBlendMode : byte { Override, Additive }
+    public enum ClipLoopBoundary : byte { AuthoredEndpoint, Start, End }
     public struct AnimationClipRequest : IBufferElementData
     {
         public ClipId Clip;
@@ -11,6 +12,7 @@ namespace AnimationSystemDOTS
         public float Weight;
         public int Layer;
         public PoseBlendMode BlendMode;
+        public ClipLoopBoundary LoopBoundary;
         public BlobAssetReference<BoneMaskBlob> Mask;
         public ulong InstanceSequence;
     }

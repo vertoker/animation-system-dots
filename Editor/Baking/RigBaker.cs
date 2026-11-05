@@ -16,22 +16,32 @@ namespace AnimationSystemDOTS.Editor.Baking
             var animator = GetComponent<Animator>();
             if (animator != null) DependsOn(animator.avatar);
             var libraryAuthoring = GetComponent<AnimationLibraryAuthoring>();
+            var controllerAuthoring = GetComponent<AnimationControllerAuthoring>();
             DependsOn(authoring.Settings);
             var rig = default(BlobAssetReference<RigDefinitionBlob>);
             var library = default(BlobAssetReference<AnimationLibraryBlob>);
+            var controller = default(BlobAssetReference<AnimatorControllerBlob>);
             var clips = new List<BlobAssetReference<AnimationClipBlob>>();
             var meshBindings = new List<BlobAssetReference<SkinnedMeshBindingBlob>>();
             var meshInputs = new List<SkinnedMeshBindingBakingData>();
             var ownsRig = false;
             var ownsLibrary = false;
+            var ownsController = false;
             try
             {
                 if (authoring.Settings == null) throw new ArgumentException("Explicit AnimationBakeSettings are required.");
                 var rigResult = RigBakePipeline.Bake(authoring.gameObject);
                 if (!rigResult.Success) throw new ArgumentException(string.Join("\n", rigResult.Diagnostics));
                 rig = rigResult.Rig; ownsRig = true;
-                var inputs = libraryAuthoring != null ? libraryAuthoring.Clips : Array.Empty<AnimationClip>();
-                if (inputs == null) throw new ArgumentException("Animation library clip list is null.");
+                var declared = libraryAuthoring != null ? libraryAuthoring.Clips : Array.Empty<AnimationClip>();
+                if (declared == null) throw new ArgumentException("Animation library clip list is null.");
+                var inputs = new List<AnimationClip>(declared);
+                if (controllerAuthoring != null)
+                {
+                    if (controllerAuthoring.Controller == null) throw new ArgumentException("AnimationControllerAuthoring requires a .controller source.");
+                    DependsOn(controllerAuthoring.Controller);
+                    foreach (var clip in controllerAuthoring.Controller.animationClips) if (!inputs.Contains(clip)) inputs.Add(clip);
+                }
                 foreach (var input in inputs)
                 {
                     DependsOn(input);
@@ -46,6 +56,12 @@ namespace AnimationSystemDOTS.Editor.Baking
                 var libraryResult = LibraryBakePipeline.Build(rig, clips);
                 if (!libraryResult.Success) throw new ArgumentException(string.Join("\n", libraryResult.Diagnostics));
                 library = libraryResult.Library; ownsLibrary = true;
+                if (controllerAuthoring != null)
+                {
+                    var result = ControllerBakePipeline.Build(controllerAuthoring.Controller, inputs, library);
+                    if (!result.Success) throw new ArgumentException(string.Join("\n", result.Diagnostics));
+                    controller = result.Controller; ownsController = true;
+                }
                 foreach (var renderer in GetComponentsInChildren<SkinnedMeshRenderer>())
                 {
                     DependsOn(renderer); DependsOn(renderer.sharedMesh);
@@ -66,10 +82,22 @@ namespace AnimationSystemDOTS.Editor.Baking
                 // point Unity's blob store owns them, including across incremental rebakes.
                 AddBlobAsset(ref rig, out _); ownsRig = false;
                 AddBlobAsset(ref library, out _); ownsLibrary = false;
+                if (controller.IsCreated) { AddBlobAsset(ref controller, out _); ownsController = false; }
                 var entity = GetEntity(TransformUsageFlags.Dynamic);
                 AddComponent(entity, new AnimationRig { Rig = rig, Library = library });
                 AddComponent(entity, new AnimationClock());
-                AddComponent(entity, new AnimationPlaybackMode());
+                AddComponent(entity, new AnimationPlaybackMode { Value = controller.IsCreated ? PlaybackDriver.Controller : PlaybackDriver.Scripted });
+                if (controller.IsCreated)
+                {
+                    AddComponent(entity, new AnimationController { Definition = controller });
+                    AddComponent(entity, new ControllerLayerState());
+                    var parameters = AddBuffer<AnimationParameterValue>(entity);
+                    for (var p = 0; p < controller.Value.Parameters.Length; p++)
+                    {
+                        var definition = controller.Value.Parameters[p];
+                        parameters.Add(new AnimationParameterValue { Float = definition.DefaultFloat, Int = definition.DefaultInt });
+                    }
+                }
                 AddComponent(entity, ClipPlaybackState.Initial);
                 AddBuffer<ScriptedPlaybackCommand>(entity);
                 AddBuffer<AnimationClipRequest>(entity);
@@ -94,6 +122,7 @@ namespace AnimationSystemDOTS.Editor.Baking
                 foreach (var clip in clips) if (clip.IsCreated) clip.Dispose();
                 foreach (var binding in meshBindings) if (binding.IsCreated) binding.Dispose();
                 if (ownsLibrary && library.IsCreated) library.Dispose();
+                if (ownsController && controller.IsCreated) controller.Dispose();
                 if (ownsRig && rig.IsCreated) rig.Dispose();
             }
         }

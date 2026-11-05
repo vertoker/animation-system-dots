@@ -26,4 +26,4 @@ Actual Editor close/reopen verification recovered the same rig/clip keys and pos
 
 Verified: full Editor suite **37/37**, including 7 rig, 8 clip, 6 cache, 1 concurrent publication, 3 library, 2 SubScene integration and 10 oracle/fixture tests. XML: `Artifacts/Verification/stage1-final-green.xml`.
 
-The package does not yet provide an ECS animation player. Mesh bindings and mask/controller import dependencies are completed with their consuming stages, without placeholder implementations.
+The package now includes scripted playback, mesh bindings and a constrained AnimatorController converter. Add `AnimationControllerAuthoring` to collect the graph's clips automatically; its asset dependency participates in live incremental rebaking. See [Controllers.md](Controllers.md) for setup, ownership and exact import diagnostics. AvatarMask conversion remains planned.

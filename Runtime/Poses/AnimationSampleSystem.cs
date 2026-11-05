@@ -34,7 +34,7 @@ namespace AnimationSystemDOTS
                                 && (clip.Duration <= 0 || clip.SampleCount > 1 && clip.SampleStep > 0)
                                 && (clip.Tracks[bone].Samples.Length == 1 || clip.Tracks[bone].Samples.Length == clip.SampleCount))
                             {
-                                sample.Pose = ClipSampler.SampleBone(ref clip, bone, request.Time); sample.IsValid = 1;
+                                sample.Pose = ClipSampler.SampleBone(ref clip, bone, request.Time, request.LoopBoundary); sample.IsValid = 1;
                             }
                         }
                         samples[requestIndex * count + bone] = sample;

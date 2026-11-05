@@ -84,11 +84,11 @@ Generated consumer projects and their `consumer-result.json` reports live in `.v
 
 ## Current functionality and remaining work
 
-Implemented and tested: Generic and target-Avatar Humanoid clip baking, explicit ECS playback and blending, affine skeleton poses, skinning, animated bounds, prefab lifecycle and a 1000-character Humanoid scene. The user confirmed depth/normal/tangent parity with a conventional SkinnedMeshRenderer.
+Implemented and tested: Generic and target-Avatar Humanoid clip baking, explicit ECS playback and blending, affine skeleton poses, skinning, animated bounds, prefab lifecycle and 1000-character scenes. Ordinary Unity `.controller` assets now bake into a single-layer ECS/Burst state machine with typed parameters, transitions and crossfades. See [controller setup and supported subset](Documentation~/Controllers.md); the editable example is `Samples~/Sandbox/Scenes/02_Controller.unity`. The user confirmed depth/normal/tangent parity with a conventional SkinnedMeshRenderer.
 
 The original full feature plan still includes:
 
-- Animator Controller conversion, parameters, transitions, layers and blend trees.
+- Animator layers, blend trees, nested machines and transition interruption beyond the supported single-layer subset.
 - Root-motion extraction and application; current crowd playback is stationary in XZ.
 - Events, scalar animation curves, animated blend shapes and general bone attachments.
 - IK and procedural constraints.
