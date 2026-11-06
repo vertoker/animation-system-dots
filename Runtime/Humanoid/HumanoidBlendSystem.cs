@@ -11,14 +11,21 @@ namespace AnimationSystemDOTS.Humanoid
     public partial class HumanoidBlendSystem : SystemBase
     {
         protected override void OnCreate() => RequireForUpdate<AnimationStepContext>();
-        protected override void OnUpdate() => Dependency = new BlendJob().ScheduleParallel(Dependency);
+        protected override void OnUpdate() => Dependency = new BlendJob
+        { Controllers = GetComponentLookup<ControllerLayerState>(true), Playback = GetComponentLookup<AnimationPlaybackMode>(true) }.ScheduleParallel(Dependency);
 
         [BurstCompile]
         partial struct BlendJob : IJobEntity
         {
-            void Execute(in HumanoidRigBinding binding, in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests,
+            [ReadOnly] public ComponentLookup<ControllerLayerState> Controllers;
+            [ReadOnly] public ComponentLookup<AnimationPlaybackMode> Playback;
+            void Execute(Entity entity, in HumanoidRigBinding binding, in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests,
                 ref HumanoidBodyPose body, DynamicBuffer<HumanoidMuscleValue> muscles, DynamicBuffer<HumanoidRootMuscleValue> rootMuscles)
             {
+                if (Controllers.HasComponent(entity) && Playback.HasComponent(entity) && Playback[entity].Value == PlaybackDriver.Controller
+                    && Controllers[entity].Result == ControllerEvaluationResult.Success && Controllers[entity].RetainPose != 0
+                    && (body.Result == HumanoidEvaluationResult.Success || body.Result == HumanoidEvaluationResult.RetainedPose))
+                { body.Result = HumanoidEvaluationResult.RetainedPose; return; }
                 body = new HumanoidBodyPose { Rotation = quaternion.identity, Result = HumanoidEvaluationResult.NoRequests };
                 muscles.ResizeUninitialized(95);
                 rootMuscles.Clear();

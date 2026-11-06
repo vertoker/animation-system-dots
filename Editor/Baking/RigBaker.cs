@@ -101,6 +101,7 @@ namespace AnimationSystemDOTS.Editor.Baking
                 {
                     AddComponent(entity, new AnimationController { Definition = controller });
                     AddComponent(entity, new ControllerLayerState());
+                    AddBuffer<ControllerMotionValue>(entity);
                     var parameters = AddBuffer<AnimationParameterValue>(entity);
                     for (var p = 0; p < controller.Value.Parameters.Length; p++)
                     {

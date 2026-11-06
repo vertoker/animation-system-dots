@@ -7,11 +7,14 @@ namespace AnimationSystemDOTS
     {
         public int CurrentState, NextState;
         public double NormalizedTime, NextNormalizedTime;
+        // Seconds for fixed fades, source normalized units otherwise. Dynamic
+        // Blend Tree duration changes the normalized progress rate every step.
         public double TransitionTime, TransitionDuration;
         public ulong CurrentSequence, NextSequence, Sequence;
         public byte Initialized;
         public byte NormalizedTransition;
         public ControllerEvaluationResult Result;
+        public byte RetainPose;
     }
     public struct ControllerStateSnapshot
     {

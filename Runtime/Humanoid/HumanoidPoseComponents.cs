@@ -13,7 +13,7 @@ namespace AnimationSystemDOTS.Humanoid
     public enum HumanoidEvaluationResult : byte
     {
         Success, NoRequests, InvalidDefinition, InvalidChannels, UnsupportedBlendMode,
-        UnsupportedMask, UnsupportedLayer, MissingAvatar, InvalidPose
+        UnsupportedMask, UnsupportedLayer, MissingAvatar, InvalidPose, RetainedPose
     }
 
     public struct HumanoidBodyPose : IComponentData

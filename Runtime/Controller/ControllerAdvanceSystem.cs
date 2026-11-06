@@ -8,12 +8,18 @@ namespace AnimationSystemDOTS
     [UpdateBefore(typeof(AnimationSampleSystem))]
     public partial class ControllerAdvanceSystem : SystemBase
     {
-        protected override void OnCreate() => RequireForUpdate<AnimationStepContext>();
+        EntityQuery missingScratch;
+        protected override void OnCreate()
+        {
+            RequireForUpdate<AnimationStepContext>();
+            missingScratch = GetEntityQuery(new EntityQueryDesc { All = new[] { ComponentType.ReadOnly<AnimationController>() }, None = new[] { ComponentType.ReadOnly<ControllerMotionValue>() } });
+        }
         protected override void OnUpdate()
         {
             var step = SystemAPI.GetSingleton<AnimationStepContext>();
             if (!math.isfinite(step.DeltaTime) || step.DeltaTime < 0)
                 throw new System.ArgumentException("Animation delta time must be finite and nonnegative.");
+            if (!missingScratch.IsEmptyIgnoreFilter) EntityManager.AddComponent<ControllerMotionValue>(missingScratch);
             Dependency = new AdvanceJob { Step = step }.ScheduleParallel(Dependency);
         }
         [BurstCompile]
@@ -22,7 +28,7 @@ namespace AnimationSystemDOTS
             public AnimationStepContext Step;
             void Execute(in AnimationRig rig, in AnimationController controller, in AnimationPlaybackMode mode,
                 ref AnimationClock clock, ref ControllerLayerState state, DynamicBuffer<AnimationParameterValue> parameters,
-                DynamicBuffer<AnimationClipRequest> requests)
+                DynamicBuffer<AnimationClipRequest> requests, DynamicBuffer<ControllerMotionValue> scratch)
             {
                 if (mode.Value != PlaybackDriver.Controller) return;
                 if (clock.HasTick != 0 && ((Step.Mode == AnimationStepMode.Normal && Step.Tick <= clock.Tick)
@@ -39,6 +45,7 @@ namespace AnimationSystemDOTS
                     if (graph.Parameters[p].Type == AnimationParameterType.Float && !math.isfinite(parameters[p].Float))
                     { state.Result = ControllerEvaluationResult.InvalidParameters; requests.Clear(); return; }
                 state.Result = ControllerEvaluationResult.Success;
+                if (graph.Motions.Length > 0) ControllerMotionSolver.Evaluate(ref graph, ref rig.Library.Value, parameters, scratch);
                 if (state.Initialized == 0)
                 {
                     state.CurrentState = Entry(ref graph, parameters); state.NextState = -1;
@@ -50,11 +57,12 @@ namespace AnimationSystemDOTS
                 var previous = state.NormalizedTime;
                 var nextPrevious = state.NextNormalizedTime;
                 ref var current = ref graph.States[state.CurrentState];
-                state.NormalizedTime = Advance(previous, dt, ref current, parameters);
+                var currentDuration = ControllerMotionSolver.Duration(ref graph, ref current, scratch);
+                state.NormalizedTime = Advance(previous, dt, ref current, parameters, currentDuration);
                 if (state.NextState >= 0)
                 {
-                    state.NextNormalizedTime = Advance(nextPrevious, dt, ref graph.States[state.NextState], parameters);
-                    var progressStep = dt * (state.NormalizedTransition != 0 ? math.abs(Speed(ref current, parameters)) : 1);
+                    state.NextNormalizedTime = Advance(nextPrevious, dt, ref graph.States[state.NextState], parameters, ControllerMotionSolver.Duration(ref graph, ref graph.States[state.NextState], scratch));
+                    var progressStep = dt * TransitionRate(state.NormalizedTransition, currentDuration, ref current, parameters);
                     state.TransitionTime = math.min(state.TransitionDuration, state.TransitionTime + progressStep);
                     if (state.TransitionTime >= state.TransitionDuration) Promote(ref state, ref previous, nextPrevious);
                 }
@@ -71,35 +79,39 @@ namespace AnimationSystemDOTS
                         state.NextState = target; state.NextSequence = ++state.Sequence;
                         nextPrevious = state.NextNormalizedTime = transition.Offset;
                         state.NormalizedTransition = transition.FixedDuration == 0 ? (byte)1 : (byte)0;
-                        state.TransitionDuration = transition.FixedDuration != 0 ? transition.Duration : transition.Duration * current.Duration;
+                        state.TransitionDuration = transition.FixedDuration != 0 || currentDuration > 0 ? transition.Duration : 0;
                         // Exit time may fall inside this step. Native Mecanim advances the
                         // newly entered state and fade by the remaining part of the step.
                         var remaining = dt * remainingFraction;
-                        state.NextNormalizedTime = Advance(nextPrevious, remaining, ref graph.States[target], parameters);
+                        state.NextNormalizedTime = Advance(nextPrevious, remaining, ref graph.States[target], parameters, ControllerMotionSolver.Duration(ref graph, ref graph.States[target], scratch));
                         state.TransitionTime = math.min(state.TransitionDuration,
-                            remaining * (state.NormalizedTransition != 0 ? math.abs(Speed(ref current, parameters)) : 1));
+                            remaining * TransitionRate(state.NormalizedTransition, currentDuration, ref current, parameters));
                         if (state.TransitionDuration <= state.TransitionTime) Promote(ref state, ref previous, nextPrevious);
                     }
                 }
                 requests.Clear();
+                state.RetainPose = 0;
                 if (state.NextState >= 0)
                 {
                     var weight = state.TransitionDuration > 0 ? (float)(state.TransitionTime / state.TransitionDuration) : 1;
-                    Request(ref graph.States[state.CurrentState], previous, state.NormalizedTime, 1 - weight, state.CurrentSequence, requests);
-                    Request(ref graph.States[state.NextState], nextPrevious, state.NextNormalizedTime, weight, state.NextSequence, requests);
+                    Request(ref graph, ref rig.Library.Value, ref graph.States[state.CurrentState], scratch, previous, state.NormalizedTime, 1 - weight, state.CurrentSequence, requests);
+                    Request(ref graph, ref rig.Library.Value, ref graph.States[state.NextState], scratch, nextPrevious, state.NextNormalizedTime, weight, state.NextSequence, requests);
                 }
-                else Request(ref graph.States[state.CurrentState], previous, state.NormalizedTime, 1, state.CurrentSequence, requests);
+                else Request(ref graph, ref rig.Library.Value, ref graph.States[state.CurrentState], scratch, previous, state.NormalizedTime, 1, state.CurrentSequence, requests);
+                if (graph.Motions.Length > 0 && requests.Length == 0) state.RetainPose = 1;
                 clock.Tick = Step.Tick; clock.Revision = Step.Revision; clock.Mode = Step.Mode; clock.HasTick = 1;
                 if (Step.Mode != AnimationStepMode.Seek && math.isfinite(clock.Time + dt)) clock.Time += dt;
             }
             static double Speed(ref ControllerStateDefinition state, DynamicBuffer<AnimationParameterValue> parameters)
                 => (double)state.Speed * (state.SpeedParameter >= 0 ? parameters[state.SpeedParameter].Float : 1);
-            static double Advance(double time, double dt, ref ControllerStateDefinition state, DynamicBuffer<AnimationParameterValue> parameters)
+            static double TransitionRate(byte normalized, double duration, ref ControllerStateDefinition state, DynamicBuffer<AnimationParameterValue> parameters)
+                => normalized == 0 ? 1 : duration > 0 ? math.abs(Speed(ref state, parameters)) / duration : 0;
+            static double Advance(double time, double dt, ref ControllerStateDefinition state, DynamicBuffer<AnimationParameterValue> parameters, double duration)
             {
                 // Mecanim's constant negative state speed reverses the clip, while its
                 // reported normalized clock advances using the absolute constant speed.
                 var rate = math.abs((double)state.Speed) * (state.SpeedParameter >= 0 ? parameters[state.SpeedParameter].Float : 1);
-                var value = state.Duration > 0 ? time + dt * rate / state.Duration : 0;
+                var value = duration > 0 ? time + dt * rate / duration : 0;
                 return math.isfinite(value) ? value : time;
             }
             static void Promote(ref ControllerLayerState state, ref double previous, double nextPrevious)
@@ -108,12 +120,15 @@ namespace AnimationSystemDOTS
                 state.CurrentSequence = state.NextSequence; previous = nextPrevious;
                 state.NextNormalizedTime = state.TransitionTime = state.TransitionDuration = 0;
             }
-            static void Request(ref ControllerStateDefinition state, double previous, double time, float weight, ulong sequence,
+            static void Request(ref AnimatorControllerBlob graph, ref AnimationLibraryBlob library, ref ControllerStateDefinition state, DynamicBuffer<ControllerMotionValue> scratch, double previous, double time, float weight, ulong sequence,
                 DynamicBuffer<AnimationClipRequest> requests)
-                => requests.Add(new AnimationClipRequest { Clip = state.Clip,
+            {
+                if (graph.Motions.Length > 0) { ControllerMotionSolver.Emit(ref graph, ref library, ref state, scratch, previous, time, weight, sequence, requests); return; }
+                requests.Add(new AnimationClipRequest { Clip = state.Clip,
                     PreviousTime = (state.Speed < 0 ? 1 - previous - state.CycleOffset : previous + state.CycleOffset) * state.Duration,
                     Time = (state.Speed < 0 ? 1 - time - state.CycleOffset : time + state.CycleOffset) * state.Duration,
                     LoopBoundary = state.Speed < 0 ? ClipLoopBoundary.End : ClipLoopBoundary.Start, Weight = weight, InstanceSequence = sequence });
+            }
             static int Entry(ref AnimatorControllerBlob graph, DynamicBuffer<AnimationParameterValue> parameters)
             {
                 for (var i = 0; i < graph.EntryCount; i++)

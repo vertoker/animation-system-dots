@@ -5,7 +5,7 @@ namespace AnimationSystemDOTS
 {
     public struct AnimatorControllerBlob
     {
-        public const int CurrentVersion = 1;
+        public const int CurrentVersion = 2;
         public int Version;
         public FixedString128Bytes LibraryKey;
         public int DefaultState;
@@ -14,6 +14,10 @@ namespace AnimationSystemDOTS
         public BlobArray<ControllerStateDefinition> States;
         public BlobArray<ControllerTransitionDefinition> Transitions;
         public BlobArray<ControllerCondition> Conditions;
+        // Post-order nodes: every child precedes its parent. Each occurrence owns
+        // a node so repeated clips retain independent child timing.
+        public BlobArray<ControllerMotionDefinition> Motions;
+        public BlobArray<ControllerMotionChild> MotionChildren;
     }
 
     public struct AnimationController : IComponentData
@@ -33,10 +37,31 @@ namespace AnimationSystemDOTS
     {
         public FixedString128Bytes Path;
         public ClipId Clip;
+        public int Motion;
         public double Duration;
         public float Speed, CycleOffset;
         public int SpeedParameter;
         public int TransitionStart, TransitionCount;
+    }
+    public enum ControllerMotionType : byte { Clip, Simple1D, SimpleDirectional2D, FreeformDirectional2D, FreeformCartesian2D, Direct }
+    public struct ControllerMotionDefinition
+    {
+        public ControllerMotionType Type;
+        public ClipId Clip;
+        public int ParameterX, ParameterY, ChildStart, ChildCount;
+        public byte NormalizeDirect;
+    }
+    public struct ControllerMotionChild
+    {
+        public int Motion, DirectParameter;
+        public float Threshold, TimeScale, CycleOffset;
+        public Unity.Mathematics.float2 Position;
+    }
+    public struct ControllerMotionValue : IBufferElementData
+    {
+        public double Duration, PreviousTime, Time;
+        public float Weight, ChildWeight;
+        public byte Reversed;
     }
     public enum ControllerConditionMode : byte { If, IfNot, Greater, Less, Equals, NotEqual }
     public struct ControllerCondition

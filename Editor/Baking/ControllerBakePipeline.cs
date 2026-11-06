@@ -44,6 +44,7 @@ namespace AnimationSystemDOTS.Editor.Baking
                 for (var i = 0; i < children.Length; i++) stateIds.Add(children[i].state, i);
                 Require(machine.defaultState != null && stateIds.ContainsKey(machine.defaultState), path, "Default state is outside the root state machine.");
                 var definitions = Parameters(controller, path, out var parameterIds);
+                var motions = new ControllerMotionBake(clips, parameterIds, definitions);
                 var transitions = new List<ControllerTransitionDefinition>();
                 var conditions = new List<ControllerCondition>();
                 var anyStart = transitions.Count;
@@ -59,7 +60,6 @@ namespace AnimationSystemDOTS.Editor.Baking
                 }
                 var entryCount = transitions.Count - entryStart;
                 var names = new HashSet<string>(StringComparer.Ordinal);
-                HashSet<string> propertyLayout = null;
                 for (var i = 0; i < children.Length; i++)
                 {
                     var state = children[i].state; var statePath = path + "/" + state.name;
@@ -70,19 +70,9 @@ namespace AnimationSystemDOTS.Editor.Baking
                         && !state.cycleOffsetParameterActive, statePath, "IK, mirror, motion-time and cycle-offset parameters are unsupported.");
                     Require(math.isfinite(state.speed) && math.isfinite(state.cycleOffset), statePath, "Speed and cycle offset must be finite.");
                     var motion = state.motion as AnimationClip;
-                    Require(motion != null, statePath, "A state must contain an AnimationClip; empty motions and Blend Trees are unsupported.");
-                    var bindings = new HashSet<string>(StringComparer.Ordinal);
-                    foreach (var binding in AnimationUtility.GetCurveBindings(motion))
-                        bindings.Add(binding.type.FullName + "\n" + binding.propertyName + "\n" + binding.path);
-                    // Native Write Defaults=false retains channels absent from the
-                    // incoming motion. Rest-completed baked clips cannot represent that
-                    // history, so require a common authored property layout explicitly.
-                    if (propertyLayout == null) propertyLayout = bindings;
-                    else Require(propertyLayout.SetEquals(bindings), statePath,
-                        "All controller clips must have the same authored property layout. Sparse Write Defaults=false channel preservation is unsupported.");
+                    var motionId = motions.Add(state.motion, statePath);
                     var clipId = -1;
                     for (var c = 0; c < clips.Count; c++) if (clips[c] == motion) { clipId = c; break; }
-                    Require(clipId >= 0, statePath, "State clip is absent from the rig's baked library.");
                     var speedParameter = -1;
                     if (state.speedParameterActive)
                     {
@@ -91,8 +81,8 @@ namespace AnimationSystemDOTS.Editor.Baking
                     }
                     var start = transitions.Count;
                     AddTransitions(state.transitions, false, stateIds, parameterIds, definitions, transitions, conditions, statePath);
-                    states[i] = new ControllerStateDefinition { Path = Name(layer.name + "." + state.name, statePath), Clip = new ClipId(clipId),
-                        Duration = library.Value.Clips[clipId].Duration, Speed = state.speed, CycleOffset = library.Value.Clips[clipId].IsLooping != 0 ? state.cycleOffset : 0,
+                    states[i] = new ControllerStateDefinition { Path = Name(layer.name + "." + state.name, statePath), Clip = new ClipId(clipId), Motion = motionId,
+                        Duration = clipId >= 0 ? library.Value.Clips[clipId].Duration : 0, Speed = state.speed, CycleOffset = clipId < 0 || library.Value.Clips[clipId].IsLooping != 0 ? state.cycleOffset : 0,
                         SpeedParameter = speedParameter, TransitionStart = start, TransitionCount = transitions.Count - start };
                 }
                 using (var builder = new BlobBuilder(Allocator.Temp))
@@ -109,6 +99,10 @@ namespace AnimationSystemDOTS.Editor.Baking
                     for (var i = 0; i < transitions.Count; i++) targetTransitions[i] = transitions[i];
                     var targetConditions = builder.Allocate(ref root.Conditions, conditions.Count);
                     for (var i = 0; i < conditions.Count; i++) targetConditions[i] = conditions[i];
+                    var targetMotions = builder.Allocate(ref root.Motions, motions.Nodes.Count);
+                    for (var i = 0; i < motions.Nodes.Count; i++) targetMotions[i] = motions.Nodes[i];
+                    var targetChildren = builder.Allocate(ref root.MotionChildren, motions.Children.Count);
+                    for (var i = 0; i < motions.Children.Count; i++) targetChildren[i] = motions.Children[i];
                     return new ControllerBakeResult { Success = true, Controller = builder.CreateBlobAssetReference<AnimatorControllerBlob>(Allocator.Persistent), Diagnostics = Array.Empty<string>() };
                 }
             }

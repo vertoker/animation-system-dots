@@ -57,10 +57,13 @@ Files: extend `Runtime/Controller/AnimatorControllerBlob.cs`, `Editor/Baking/Con
 
 Interfaces: motion node index on each state, flattened child arrays with parameter IDs/thresholds/2D positions/time scales/cycle offsets; `ControllerMotionSolver` is unmanaged and allocation-free, produces clip requests using a caller-owned scratch buffer. Maintain normalized state-time semantics and dynamic effective duration.
 
-- [ ] Add native weight/duration oracle tests for 1D, Simple Directional, Freeform Directional, Freeform Cartesian and Direct, plus nested trees, child speed/cycle offset and Direct normalization. Include outside-hull/boundary/origin/duplicate-position inputs and invalid parameters.
-- [ ] Observe rejection/failure with version 1; implement serialization/validation and each solver against native oracle, not assumed formulas. Avoid per-frame managed allocations.
-- [ ] Integrate request generation with existing single-layer advancement and verify all prior controller tests, exact tick/seek/replay and loop boundary rules.
-- [ ] Commit motion trees after all five modes have explicit evidence; report unsupported degenerate authoring configurations precisely.
+- [x] Add native weight/duration oracle tests for 1D, Simple Directional, Freeform Directional, Freeform Cartesian and Direct, plus nested trees, child speed/cycle offset and Direct normalization. Include outside-hull/boundary/origin/duplicate-position inputs and invalid parameters.
+- [x] Observe rejection/failure with version 1; implement serialization/validation and each solver against native oracle, not assumed formulas. Avoid per-frame managed allocations.
+- [x] Integrate request generation with existing single-layer advancement and verify all prior controller tests, exact tick/seek/replay and loop boundary rules.
+- [x] Commit motion trees after all five modes have explicit evidence; report unsupported degenerate authoring configurations precisely.
+
+
+Execution limits: Direct requires Normalize Blend Values; partial and zero weights follow native behavior. Simple Directional requires directions surrounding the origin or one nonzero direction; duplicate/open/collinear layouts are rejected with alternatives. Native grid evidence covers the supported subset, not every degenerate Mecanim configuration.
 
 ## Task 4 — layered pose evaluation and masks
 

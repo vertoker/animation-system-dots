@@ -27,6 +27,7 @@ namespace AnimationSystemDOTS.Humanoid
                 RefRW<HumanoidBodyPose>, DynamicBuffer<HumanoidMuscleValue>, DynamicBuffer<HumanoidRootMuscleValue>, DynamicBuffer<BoneLocalPose>>())
             {
                 var local = localBuffer;
+                if (body.ValueRO.Result == HumanoidEvaluationResult.RetainedPose) continue;
                 if (body.ValueRO.Result == HumanoidEvaluationResult.NoRequests)
                 {
                     if (rig.ValueRO.Rig.IsCreated)

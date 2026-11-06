@@ -1,5 +1,6 @@
 using Unity.Burst;
 using Unity.Entities;
+using Unity.Collections;
 using Unity.Mathematics;
 namespace AnimationSystemDOTS
 {
@@ -8,15 +9,20 @@ namespace AnimationSystemDOTS
     public partial class AnimationBlendSystem : SystemBase
     {
         protected override void OnCreate() => RequireForUpdate<AnimationStepContext>();
-        protected override void OnUpdate() => Dependency = new BlendJob().ScheduleParallel(Dependency);
+        protected override void OnUpdate() => Dependency = new BlendJob
+        { Controllers = GetComponentLookup<ControllerLayerState>(true), Playback = GetComponentLookup<AnimationPlaybackMode>(true) }.ScheduleParallel(Dependency);
 
         [BurstCompile]
         [WithNone(typeof(PreciseHumanoidPose))]
         partial struct BlendJob : IJobEntity
         {
-            void Execute(in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests,
+            [ReadOnly] public ComponentLookup<ControllerLayerState> Controllers;
+            [ReadOnly] public ComponentLookup<AnimationPlaybackMode> Playback;
+            void Execute(Entity entity, in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests,
                 in DynamicBuffer<SampledBonePose> samples, DynamicBuffer<BoneLocalPose> local)
             {
+                if (Controllers.HasComponent(entity) && Playback.HasComponent(entity) && Playback[entity].Value == PlaybackDriver.Controller
+                    && Controllers[entity].Result == ControllerEvaluationResult.Success && Controllers[entity].RetainPose != 0 && local.Length > 0) return;
                 if (!rig.Rig.IsCreated) { local.Clear(); return; }
                 var count = rig.Rig.Value.RestLocalPoses.Length;
                 local.ResizeUninitialized(count);

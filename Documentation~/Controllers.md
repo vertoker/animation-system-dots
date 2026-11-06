@@ -6,7 +6,7 @@ The Unity Animator window is the graph editor. An ordinary `.controller` asset i
 
 1. Add `AnimationRigAuthoring` to the rig root and assign `AnimationBakeSettings`. Generic clips must match its transform paths. Humanoid clips require a valid target Avatar on the authoring Animator, as with ordinary Humanoid clip baking.
 2. Add `AnimationControllerAuthoring` and assign the `.controller` asset. `AnimationLibraryAuthoring` is optional: controller clips are collected automatically. Explicit library clips, when provided, retain their prefix IDs; missing controller clips are appended.
-3. Open the asset in Unity's Animator window. Use one base layer and AnimationClip states. Disable **Write Defaults** on every state and **IK Pass** on the layer. Use **Interruption Source: None** on transitions.
+3. Open the asset in Unity's Animator window. Use one base layer with AnimationClip or Blend Tree states. Disable **Write Defaults** on every state and **IK Pass** on the layer. Use **Interruption Source: None** on transitions. Direct trees require **Normalize Blend Values**.
 4. Put the rig/prefab into a SubScene and instantiate its baked entity. Baking selects `PlaybackDriver.Controller`, initializes parameters from the asset defaults and registers the immutable controller with Unity's blob store.
 5. Supply one `AnimationStepContext` singleton per World before `AnimationSimulationSystemGroup`, using your simulation's increasing tick and finite nonnegative delta. The package does not read Unity's static time. The sample supplies this clock itself.
 
@@ -46,7 +46,8 @@ The controller and scripted driver check `AnimationPlaybackMode`; only the selec
 | Feature | Contract |
 |---|---|
 | Parameters | Float, Int, Bool, Trigger; defaults come from the asset. Float conditions use Greater/Less; Int additionally supports Equals/NotEqual; Bool/Trigger use If/IfNot. |
-| State motions | AnimationClip, Generic or target-baked Humanoid; finite constant speed, Float speed multiplier, constant cycle offset. |
+| State motions | AnimationClip or nested Blend Trees, Generic or target-baked Humanoid; finite constant speed, Float speed multiplier, constant cycle offset. |
+| Blend Trees | 1D, Simple Directional 2D, Freeform Directional 2D, Freeform Cartesian 2D and normalized Direct. Dynamic effective duration, child clip speed/reversal and cycle offsets. |
 | Entry | Default state plus serialized conditional Entry transitions; accepted Entry triggers are consumed. |
 | Transitions | Serialized order, all conditions must pass, Any State before current-state edges, self transitions and root Exit/re-entry. |
 | Timing | Exit Time, repeated loop gates, values above one, fixed-seconds or normalized duration, destination normalized offset; source speed changes affect normalized fade progress. |
@@ -57,9 +58,21 @@ The controller and scripted driver check `AnimationPlaybackMode`; only the selec
 
 **Every state clip must have the same authored curve-property layout.** The standalone baker completes absent transform groups with rest values. Native Write Defaults=false can preserve previously animated properties when another state does not bind them; that history is not represented by these complete baked poses. The converter rejects differing layouts with the exact asset/state path. This is deliberately conservative: author clips with a common set of animated properties. The included Walk and Workout assets both provide the same 130 Humanoid bindings.
 
-Unsupported settings produce diagnostics rather than being ignored: additional/synced/additive layers and masks, nested state machines, Blend Trees, empty motions, override controllers, StateMachineBehaviour callbacks, IK, mirror, Write Defaults=true, motion-time/cycle-offset parameters and transition interruption. Root motion, animation events and animated scalar/object-reference properties remain outside this controller milestone. Names and full state paths are limited to 125 UTF-8 bytes.
+Unsupported settings produce diagnostics rather than being ignored: additional/synced/additive layers and masks, nested state machines, empty motions, override controllers, StateMachineBehaviour callbacks, IK, mirror, Write Defaults=true, motion-time/cycle-offset parameters and transition interruption. Root motion, animation events and animated scalar/object-reference properties remain outside this controller milestone. Names and full state paths are limited to 125 UTF-8 bytes.
 
-This is a tested subset, not full Mecanim API compatibility. Layers/Blend Trees and interruption are the next graph milestone.
+This is a tested subset, not full Mecanim API compatibility. Layers, hierarchy and interruption remain under implementation for the three new validation scenes.
+
+## Blend Tree constraints and timing
+
+Motion graph version 2 stores post-order nodes and child edges. Repeated clip occurrences remain separate so their timing is independent. Each entity owns a reusable `ControllerMotionValue` scratch buffer; it is baked with the rig or added once for programmatically created controller entities. Weight/duration evaluation and leaf request generation run inside the controller Burst job without per-frame managed allocations.
+
+All tree parameters must be Float. Duplicate 1D thresholds and duplicate 2D positions are rejected. Simple Directional permits one nonzero direction or a set surrounding the origin with every angular gap below 180 degrees; multiple speeds along one ray require Freeform Directional. Open/collinear Simple Directional layouts are rejected with 1D/Cartesian guidance because their native boundary behavior is not covered by this solver contract. Zero/nonfinite child time scales, mirrors, empty trees and cyclic references are rejected when present in source data. Unity's authoring setter may already sanitize some invalid values before conversion.
+
+Direct requires **Normalize Blend Values**. Unity normalizes sums above one, retains partial influence below one, and preserves the previous pose when all weights are zero with Write Defaults disabled. The ECS pipeline follows that behavior; the scripted driver's empty-request fallback still restores rest. Unnormalized Direct is rejected: extrapolating authored properties while retaining unanimated channels needs a binding-aware representation beyond complete baked poses.
+
+Tree duration follows current parameters, including during normalized transitions. A normalized fade integrates against the source's current effective duration; fixed fades remain measured in seconds. Child speed/cycle-offset settings apply to leaf clips. In the tested Unity version those settings on a nested Blend Tree child do not alter its output, which the converter preserves.
+
+Native differential fixtures cover 289 parameter points per configuration, all five tree modes, multiple speeds on one direction, missing Idle, unequal radii, irregular Cartesian positions, nesting, reversal and cycle offsets. They compare leaf weights, normalized clocks and actual Generic ECS sampled poses. Real Humanoid controller checks cover 1D and Direct partial/zero inputs: maximum measured joint errors were 0.936 mm and 1.008 mm respectively, with 0 degrees measured local rotation error. These are accuracy checks, not performance or complete layer/hierarchy claims.
 
 ## Included 1000-controller scene
 
