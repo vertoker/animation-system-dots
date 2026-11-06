@@ -1,100 +1,74 @@
 # Animation System DOTS
 
-Experimental Unity ECS animation package for Unity **6000.6.8f1**, Entities/Entities Graphics **6.6.0**, Burst **2.0.0**. One Git repository contains the runtime, authoring, Editor tools, test scenes and developer tests.
+Experimental Unity ECS animation: Generic and Humanoid playback, Animator Controller baking, Blend Trees, layers and Entities Graphics skinning. Unity **6000.6.8f1**, Entities/Graphics/Collections **6.6.0**, Burst **2.0.0**, Mathematics **1.4.0**.
 
-## Install with Unity Package Manager
+## Develop
 
-After publishing this layout to `master`, use **Add package from git URL**:
+Open **this repository root** in Unity. It is the only permanent Unity project. Runtime edits, scenes and tests work directly without setup scripts or junctions.
 
 ```text
-https://github.com/vertoker/animation-system-dots.git#master
+Assets/
+  AnimationSystemDOTS/          Complete installable package
+    Runtime/                   ECS playback, poses, controllers and Humanoid
+    Authoring/                 Authoring components and settings
+    Rendering/                 Entities Graphics integration
+    Editor/                    Baking and sample import
+    Documentation~/            Package usage and supported features
+    Samples~/Sandbox/          Published importable sandbox snapshot
+    package.json
+  AnimationSystemDOTS.Sandbox/  Editable development scenes and fixtures
+  Tests/                       Development regression suites
+Packages/                      Root project dependencies, including Coplay MCP
+ProjectSettings/               Root development configuration
+Tools/                         Export, installation and Player checks
+Docs/Superpowers/              Maintainer plans and historical designs
+Artifacts/                     Local reports/builds, ignored by Git
+.superpowers/consumers/         Disposable installation checks, ignored by Git
 ```
 
-`package.json` is at the repository root; no `?path` is needed. Package Manager resolves the declared runtime dependencies. For reproducible projects, pin a tested commit instead of `master`.
+The sample's editable source is `Assets/AnimationSystemDOTS.Sandbox`. After editing it, publish the package snapshot and check its parity:
 
-For the test scenes, use a configured **Universal 3D/URP 17.6.0** project, then use the package's **Samples > Validation Sandbox > Import**, or **Tools > Animation System DOTS > Import Validation Sandbox**. Imported samples belong in the consumer's `Assets`, where scenes, prefabs and importer settings are writable. Package-cache sources are not modified. Both sample import locations are supported.
+```powershell
+python Tools/SyncSandbox.py
+python Tools/SyncSandbox.py --check
+python Tools/ValidateLayout.py
+python -m unittest discover -s Tools/tests -v
+```
 
-If converting a Built-in project, installing URP alone does not activate it. After importing the sample, assign its `RenderPipeline/PC_RPAsset.asset` to **Project Settings > Graphics > Default Render Pipeline** and the active **Quality > Render Pipeline Asset**. For Player builds, retain BatchRendererGroup shader variants in Graphics settings. These are explicit host-project settings; importing the sample does not change them automatically. The clean-consumer verification uses this configured URP profile. The core CPU animation pipeline is separate from the sample's URP rendering requirements.
+Open `Assets/AnimationSystemDOTS.Sandbox/Scenes/05_AnimatorGO.unity`, `06_AnimatorECS.unity` or `07_AnimatorBots100.unity` for the shared 34-clip Animator comparison. Scene `04_HumanoidCrowd1000.unity` is the 1000-character test. See [controls and manual checks](Assets/AnimationSystemDOTS/Documentation~/AnimatorValidation.md).
 
-## Editable Git submodule in Assets
+## Install the package
 
-Install the dependencies below before opening Unity, then:
+After this revision is published, use Package Manager **Add package from Git URL**:
+
+```text
+https://github.com/vertoker/animation-system-dots.git?path=/Assets/AnimationSystemDOTS#master
+```
+
+Only `Assets/AnimationSystemDOTS` is the package. Pin a tested commit for reproducible consumers. Runtime dependencies come from its `package.json`; the repository's MCP, tests and project settings are not installed. Import **Validation Sandbox** from the Samples tab into a configured **URP 17.6.0** project. See [package setup](Assets/AnimationSystemDOTS/README.md).
+
+For an editable submodule in another project, keep the repository outside that project's Assets and point UPM to its package folder:
 
 ```sh
-git submodule add https://github.com/vertoker/animation-system-dots.git Assets/AnimationSystemDOTS
-git submodule update --init --recursive
+git submodule add https://github.com/vertoker/animation-system-dots.git External/AnimationSystemDOTS
 ```
 
-Edit `Assets/AnimationSystemDOTS/Runtime`, `Authoring`, `Rendering` and `Editor` directly and commit inside that submodule. Do not also install a second copy with Package Manager. Unity does not install `package.json` dependencies automatically for an ordinary Assets folder:
+In the consumer's `Packages/manifest.json` dependencies:
 
 ```json
-"com.unity.entities": "6.6.0",
-"com.unity.entities.graphics": "6.6.0",
-"com.unity.burst": "2.0.0",
-"com.unity.collections": "6.6.0",
-"com.unity.mathematics": "1.4.0",
-"com.unity.modules.animation": "1.0.0",
-"com.unity.modules.jsonserialize": "1.0.0"
+"com.vertoker.animation-system-dots": "file:../External/AnimationSystemDOTS/Assets/AnimationSystemDOTS"
 ```
 
-The same **Import Validation Sandbox** menu works in this mode. To edit the original sample scenes directly in the same submodule on Windows, close Unity and run from the consumer project root:
+Edit and commit runtime code in that submodule directly. A local UPM package is writable. To use an ordinary Assets installation instead, copy only the package folder to `Assets/AnimationSystemDOTS` and declare its dependencies in the consumer manifest; do not also install a second UPM copy. A full repository checkout nested inside Assets would include a second Unity project and is not the supported layout.
+
+## Verify distribution
 
 ```powershell
-& '.\Assets\AnimationSystemDOTS\Tools~\Setup-Development.ps1' -ProjectPath . -SamplesOnly
+.\Tools\Verify-Consumer.ps1 -Mode UPM
+.\Tools\Verify-Consumer.ps1 -Mode Assets
+.\Tools\Verify-Consumer.ps1 -Mode Git -Revision HEAD
 ```
 
-This mounts `Samples~/Sandbox` at `Assets/AnimationSystemDOTS.Sandbox` with a directory junction. Scene, material and sample-code edits then change the submodule's own files immediately. The script refuses to overwrite an existing sample folder. Use either this live mount or a normal imported copy, not both; ignore the junction and its `.meta` in the parent project's Git repository. The source scenes and their metadata remain tracked inside this submodule.
+These generate disposable projects under `.superpowers/consumers`, open Unity normally and verify sample exclusion/import plus 1000-character, ECS player and 100-bot scenes without Input System. Git mode tests the actual committed Git subpath via the local repository, without pushing. Run Editor/Runtime suites through Unity Test Runner or Coplay MCP. Unity CLI/Pipeline is disabled.
 
-## Develop this repository
-
-On Windows, from the repository root:
-
-```powershell
-.\Tools~\Setup-Development.ps1
-```
-
-Open **`DevProject~`** in Unity. Its local UPM dependency points to this repository; its sample and test folders are live junctions to `Samples~` and `Tests~`. There are no duplicated source trees to synchronize. To verify Assets installation instead, close Unity, run `Setup-Development.ps1 -Mode Assets`, then reopen `DevProject~`. Switch back with `-Mode UPM`.
-
-Open `Assets/AnimationSystemDOTS.Sandbox/Scenes/04_HumanoidCrowd1000.unity` for the 1000-character test, or `01_GenericPlayback.unity` for the smaller fixture. The development project includes URP and the test framework; these development dependencies do not become core runtime dependencies.
-
-```text
-Runtime/        ECS playback, sampling, blending and poses
-Authoring/      Authoring components and bake settings
-Rendering/      Public Entities Graphics integration
-Editor/         Baking, validation and sample import
-Samples~/       Complete test scenes and supporting assets
-Tests~/         Developer regression tests, mounted by setup
-DevProject~/    Unity development host; caches are ignored
-Tools~/         Development and acceptance scripts
-Documentation~/ Usage, verification and supported features
-```
-
-Folders ending in `~` are deliberately excluded from normal Unity asset import. Samples are included in the package download and imported on demand. The development host and test dependencies do not leak into a consumer's runtime assemblies.
-
-## Verify installation
-
-The developer test assemblies are available in the Test Runner after development setup. The installation probes create separate configured URP projects, verify that sample assemblies are initially excluded, import the sample, and check 1000 rigs / 3000 palettes / 3000 render entities with no runtime Animator:
-
-```powershell
-.\Tools~\Verify-Consumer.ps1 -Mode UPM
-.\Tools~\Verify-Consumer.ps1 -Mode Assets
-```
-
-Generated consumer projects and their `consumer-result.json` reports live in `.verify~` and are ignored by Git. Player captures/builds from the development host live in `DevProject~/Artifacts`. The Assets probe checks the same source-folder layout as an initialized submodule; it does not publish or clone a remote branch.
-
-## Current functionality and remaining work
-
-Implemented and tested: Generic and target-Avatar Humanoid clip baking, explicit ECS playback and blending, affine skeleton poses, skinning, animated bounds, prefab lifecycle and 1000-character scenes. Ordinary Unity `.controller` assets bake into ECS state machines with typed parameters, five Blend Tree modes, layers/masks, nested machines, crossfades and transition interruption. See [controller setup and supported subset](Documentation~/Controllers.md). The opt-in precise Humanoid mode blends authored muscles in Burst, then uses a managed unbound Avatar solver without per-character GameObjects or Animators. The user confirmed depth/normal/tangent parity with a conventional SkinnedMeshRenderer.
-
-The shared Mixamo comparison is in `Samples~/Sandbox/Scenes/05_AnimatorGO.unity`, `06_AnimatorECS.unity` and `07_AnimatorBots100.unity`. They use the same editable `Fixtures/Bots100.controller` and a shared motor/action profile. See [controls, manual checks and ragdoll assessment](Documentation~/AnimatorValidation.md). Input System is optional; on-screen actions and the deterministic trace work without its adapter.
-
-The original full feature plan still includes:
-
-- Root-motion extraction and application; sample locomotion currently uses an explicit shared motor.
-- Events, scalar animation curves, animated blend shapes and general bone attachments.
-- IK and procedural constraints.
-- Animation culling/LOD scheduling and additional measured optimizations.
-- Editor inspection/diagnostics, a small consumer-ready authoring sample, IL2CPP and additional platform verification.
-- Optional GPU pose engine, Physics and Netcode integrations.
-
-Multiple independent rendering Worlds remain unsupported in the stock deformation path; the repository includes a reproducible case. See [SupportMatrix](Documentation~/SupportMatrix.md), [runtime usage](Documentation~/Runtime.md) and [manual/Player checks](Documentation~/RenderingChecks.md). This is an experimental package, not full Mecanim compatibility.
+Supported behavior and remaining work: [SupportMatrix](Assets/AnimationSystemDOTS/Documentation~/SupportMatrix.md), [Animator Controllers](Assets/AnimationSystemDOTS/Documentation~/Controllers.md), [runtime usage](Assets/AnimationSystemDOTS/Documentation~/Runtime.md) and [roadmap](PLAN.md). This is an experimental package, not full Mecanim compatibility. Root motion, events, IK, ragdoll, animation LOD and additional platform verification remain separate work.

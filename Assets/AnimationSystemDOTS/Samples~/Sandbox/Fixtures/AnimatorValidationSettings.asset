@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dcaa98fbb798245449371b70a7f8de0f, type: 3}
+  m_Name: AnimatorValidationSettings
+  m_EditorClassIdentifier: AnimationSystemDOTS.Sandbox::AnimationSystemDOTS.Sandbox.AnimatorValidationSettings
+  Controller: {fileID: 9100000, guid: fa8f618790c006e4186ea96131848c78, type: 2}
+  WaveDurations: {x: 0.53333336, y: 3.1666667, z: 4.7333336}
+  PunchDurations: {x: 1.0333334, y: 2.1833334}
+  ReactionDuration: 1.6666667
+  UpperActionWeight: 0.7
+  AdditiveReactionWeight: 0.2
+  AirborneActionInfluence: 0.35
+  StateNames:
+  - Death0
+  - Death1
+  - Death2
+  - Tree0
+  - Tree1
+  - Tree2
+  - Tree3
+  - Tree4
+  - PoseScrub
+  - Jump0
+  - Jump1
+  - Jump2
+  - Jump3
+  - UpperIdle
+  - Wave0
+  - Wave1
+  - Wave2
+  - Punch0
+  - Punch1
+  - AdditiveIdle
+  - React
+  StateHashes: 0d90462f9ba0415821f148c18450c8ba1260cfcda831c6543e01c1239d94a5bd9f6f88e872f669c1e4c66eb65e97672fc8a760585db98d180ccfa4a19affa3d620aeaa4fa1e2eb9637d2ece1350e1dffd140a4d8i

@@ -1,0 +1,1 @@
+Animation System DOTS Validation Sandbox. Keep this marker and its meta file when moving the sample.

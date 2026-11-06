@@ -132,23 +132,16 @@ __pycache__/
 /Assets/SceneDependencyCache/
 /Assets/SceneDependencyCache.meta
 
-# Standalone package development host (source scenes/tests are junctions).
-/DevProject~/Library/
-/DevProject~/Temp/
-/DevProject~/Logs/
-/DevProject~/UserSettings/
-/DevProject~/Artifacts/
-/DevProject~/Assets/AnimationSystemDOTS.Sandbox
-/DevProject~/Assets/AnimationSystemDOTS.Sandbox.meta
-/DevProject~/Assets/AnimationSystemDOTS.Tests
-/DevProject~/Assets/AnimationSystemDOTS.Tests.meta
-/DevProject~/Assets/AnimationSystemDOTS
-/DevProject~/Assets/AnimationSystemDOTS.meta
-/DevProject~/Assets/SceneDependencyCache/
-/DevProject~/Assets/SceneDependencyCache.meta
-/DevProject~/Assets/InitTestScene*.unity*
-/DevProject~/Assets/Resources/PerformanceTestRun*.json*
+# Historical probes and disposable project experiments.
 /.verify~/
+/.superpowers/
+
+# Root project metadata and generated sidecars are not Unity assets.
+/Assets.meta
+/Packages.meta
+/ProjectSettings.meta
+/Logs.meta
+/UserSettings.meta
 
 # IDE sidecars generated while importing local package sources.
 *.csproj.meta

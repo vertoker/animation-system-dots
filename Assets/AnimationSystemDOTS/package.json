@@ -1,0 +1,28 @@
+{
+  "name": "com.vertoker.animation-system-dots",
+  "version": "0.1.0",
+  "displayName": "Animation System DOTS",
+  "description": "Independent ECS animation package. See Documentation~/SupportMatrix.md for verified features and work in progress.",
+  "unity": "6000.6",
+  "dependencies": {
+    "com.unity.entities": "6.6.0",
+    "com.unity.entities.graphics": "6.6.0",
+    "com.unity.burst": "2.0.0",
+    "com.unity.collections": "6.6.0",
+    "com.unity.mathematics": "1.4.0",
+    "com.unity.modules.animation": "1.0.0",
+    "com.unity.modules.jsonserialize": "1.0.0"
+  },
+  "samples": [
+    {
+      "displayName": "Validation Sandbox",
+      "description": "Generic and 1000-character Humanoid scenes, meshes, materials and diagnostic tools. Requires URP 17.6.",
+      "path": "Samples~/Sandbox"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vertoker/animation-system-dots.git",
+    "directory": "Assets/AnimationSystemDOTS"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "source": "C:\\Users\\vertoker\\Downloads\\Universal Base Characters[Standard]\\Base Characters\\Godot - UE\\Superhero_Male_FullBody.gltf",
+  "sha256": "e7fcea214ecf8855afbf910b50de6f9c7d1decfb71ca28bad8a4481452dafeb4",
+  "blender": "5.2.1 LTS",
+  "output": "BaldMale.fbx",
+  "purpose": "Same original geometry and bind pose; consistent +Z-facing FBX for Unity Humanoid"
+}
