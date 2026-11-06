@@ -32,27 +32,29 @@
 
 ### Task 1: Relocate package and promote root host
 
-- [ ] Add a layout verifier and run it against the old structure; expect failure on missing Assets package and root configuration.
-- [ ] Capture tracked GUID inventory and preserve root configuration. Move package files with metadata; move the sandbox and tests into ordinary Assets folders; move tooling to Tools and maintainer plans to Docs/Superpowers.
-- [ ] Promote host settings/dependencies/assets and retain historical caches/evidence outside the package. Remove old tracked host and obsolete junction setup.
-- [ ] Verify preserved metadata and package boundaries; launch the root Editor normally and check fresh compilation through MCP.
-- [ ] Commit exact owned paths on master.
+- [x] Add a layout verifier and run it against the old structure; expect failure on missing Assets package and root configuration.
+- [x] Capture tracked GUID inventory and preserve root configuration. Move package files with metadata; move the sandbox and tests into ordinary Assets folders; move tooling to Tools and maintainer plans to Docs/Superpowers.
+- [x] Promote host settings/dependencies/assets and retain historical caches/evidence outside the package. Remove old tracked host and obsolete junction setup.
+- [x] Verify preserved metadata and package boundaries; launch the root Editor normally and check fresh compilation through MCP.
+- [x] Commit exact owned paths on master.
 
 ### Task 2: Publish sample and validate installations
 
-- [ ] Implement `Tools/SyncSandbox.py --check` and explicit export with root source and package destination. Test missing, changed, extra files and exact byte parity with temporary fixtures.
-- [ ] Update acceptance tools to root Artifacts and consumer generation to `.superpowers/consumers`, targeting the Assets package. Preserve both UPM and Assets checks, add a pinned Git-subpath mode.
-- [ ] Run portable checks, root EditMode/PlayMode suites and clean consumer import/smoke. Keep fresh reports with actual counts and limitations.
-- [ ] Commit tooling and verified package snapshot.
+- [x] Implement `Tools/SyncSandbox.py --check` and explicit export with root source and package destination. Test missing, changed, extra files and exact byte parity with temporary fixtures.
+- [x] Update acceptance tools to root Artifacts and consumer generation to `.superpowers/consumers`, targeting the Assets package. Preserve both UPM and Assets checks, add a pinned Git-subpath mode.
+- [x] Run portable checks, root EditMode/PlayMode suites and clean consumer import/smoke. Keep fresh reports with actual counts and limitations.
+- [x] Commit tooling and verified package snapshot.
 
 ### Task 3: Documentation, review and final state
 
-- [ ] Update root/package README, installation/development instructions and maintained documentation paths. Keep earlier design/report paths explicitly historical where appropriate.
-- [ ] Add concise root/package agent guidance for the architecture and temporary consumer workflow.
-- [ ] Fresh whole-change review; resolve substantive findings and rerun affected checks.
-- [ ] Commit documentation/evidence, leave root project open on the existing scene, report observed results and any remaining manual checks.
+- [x] Update root/package README, installation/development instructions and maintained documentation paths. Keep earlier design/report paths explicitly historical where appropriate.
+- [x] Add concise root/package agent guidance for the architecture and temporary consumer workflow.
+- [x] Fresh whole-change review; resolve substantive findings and rerun affected checks.
+- [x] Commit documentation/evidence, leave root project open on the existing scene, report observed results and any remaining manual checks.
 
 ## Execution record
 
 - 2026-11-07: Inspected CullingSystemDOTS read-only. No Unity Editor process is currently running, so no live scene must be interrupted. Existing root untracked settings are an incomplete generated project; they will be preserved before promotion.
 - Authorization: user explicitly requested the architecture, plan and implementation together. Proceed under that authorization, without an additional design approval gate. Master-only work remains required.
+
+- Completed: root317tests green; final post-fix263Editor green; Assets/localUPM/Git consumers green, including exact finalcode commit ac394da. Fresh review findings fixed and directly verified. Reports: Docs/Validation/ProjectLayout.md and local Artifacts/Verification/ProjectLayout. Generated consumers archived safely after deletion policy rejection; original root configuration preserved.

@@ -1,0 +1,70 @@
+{
+  "layoutCommit": "8c832288408e9f9ab495510500e8cd1a04c69969",
+  "fixCommit": "ac394daae13f2912c7072dde59d6570bbc05a7a9",
+  "editor": {
+    "passed": 263,
+    "failed": 0,
+    "skipped": 0,
+    "job": "16ff389cd1e24beaa641e8a0e14fca04"
+  },
+  "runtime": {
+    "passed": 54,
+    "failed": 0,
+    "skipped": 0,
+    "job": "9866d02a94c74fceb6620dce9acfcb83"
+  },
+  "consumers": {
+    "Assets": {
+      "mode": "Assets",
+      "sampleRoot": "Assets/AnimationSystemDOTS.Sandbox/",
+      "error": "",
+      "characters": 1000,
+      "palettes": 3000,
+      "renderEntities": 3000,
+      "nativeAnimators": 0,
+      "ecsPlayerCharacters": 1,
+      "ecsBotCharacters": 100,
+      "animatorScenesAvailable": true,
+      "inputAdapterExcluded": true,
+      "samplesInitiallyExcluded": true,
+      "sampleImported": true,
+      "sourcePathsWritable": true,
+      "passed": true
+    },
+    "UPM": {
+      "mode": "UPM",
+      "sampleRoot": "Assets/Samples/Animation System DOTS/0.1.0/Validation Sandbox/",
+      "error": "",
+      "characters": 1000,
+      "palettes": 3000,
+      "renderEntities": 3000,
+      "nativeAnimators": 0,
+      "ecsPlayerCharacters": 1,
+      "ecsBotCharacters": 100,
+      "animatorScenesAvailable": true,
+      "inputAdapterExcluded": true,
+      "samplesInitiallyExcluded": true,
+      "sampleImported": true,
+      "sourcePathsWritable": true,
+      "passed": true
+    },
+    "Git": {
+      "mode": "UPM",
+      "sampleRoot": "Assets/Samples/Animation System DOTS/0.1.0/Validation Sandbox/",
+      "error": "",
+      "characters": 1000,
+      "palettes": 3000,
+      "renderEntities": 3000,
+      "nativeAnimators": 0,
+      "ecsPlayerCharacters": 1,
+      "ecsBotCharacters": 100,
+      "animatorScenesAvailable": true,
+      "inputAdapterExcluded": true,
+      "samplesInitiallyExcluded": true,
+      "sampleImported": true,
+      "sourcePathsWritable": true,
+      "passed": true,
+      "resolvedHash": "ac394daae13f2912c7072dde59d6570bbc05a7a9"
+    }
+  }
+}
