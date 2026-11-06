@@ -56,7 +56,9 @@ namespace AnimationSystemDOTS.Sandbox
             state.UpperWeight = Fade(state.UpperWeight, state.UpperRemaining > 0 ? math.saturate(weights.Upper) * airborne : 0, deltaTime);
             state.AdditiveWeight = Fade(state.AdditiveWeight, state.AdditiveRemaining > 0 ? math.saturate(weights.Additive) * airborne : 0, deltaTime);
             math.sincos(motor.Yaw, out var sine, out var cosine);
-            var speed = math.length(motor.Velocity);
+            // Stable gameplay input resolution across managed and Burst sqrt:
+            // an ULP around 3 m/s must not change a conditional Jump Entry.
+            var speed = math.round(math.length(motor.Velocity) * 10000) * .0001f;
             var phase = math.saturate(speed / 3);
             var direct = speed <= 3 ? new float3(1 - phase, phase, 0) : new float3(0, 1 - math.saturate((speed - 3) / 3), math.saturate((speed - 3) / 3));
             return new CharacterAnimationFrame { Speed = speed, Move = new float2(cosine * motor.Velocity.x - sine * motor.Velocity.y,

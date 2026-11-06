@@ -6,6 +6,26 @@ namespace AnimationSystemDOTS.Sandbox.Tests
     public class CharacterAnimationTests
     {
         [Test]
+        public void DeterministicTrace_ExercisesEveryJumpAndDeathVariant()
+        {
+            var jumps = new System.Collections.Generic.HashSet<int>(); var deaths = new System.Collections.Generic.HashSet<int>();
+            for (ulong tick = 0; tick < CharacterTestTrace.TickCount; tick++)
+            {
+                var command = CharacterTestTrace.Sample(tick);
+                if (command.Motor.Jump != 0 && command.Motor.Sprint == 0) jumps.Add(command.Variant);
+                if ((command.Actions & CharacterActions.Die) != 0) deaths.Add(command.Variant);
+            }
+            CollectionAssert.AreEquivalent(new[] { 0, 1, 2 }, jumps); CollectionAssert.AreEquivalent(new[] { 0, 1, 2 }, deaths);
+        }
+        [Test]
+        public void AnimationSpeed_StabilizesFloatRoundingAtGraphThresholds()
+        {
+            var state = new CharacterAnimationState();
+            var motor = new CharacterMotorState { Grounded = 1, Velocity = new float2(math.asfloat(0x40400001u), 0) };
+            var frame = CharacterAnimation.Step(ref state, motor, default, default, 1f / 60);
+            Assert.That(frame.Speed, Is.EqualTo(3f), "Managed and Burst motors can differ by one ULP; that must not select a different Jump Entry at Speed > 3.");
+        }
+        [Test]
         public void AnimationFrame_UsesCharacterLocalVelocityAndNormalizedDirectWeights()
         {
             var state = new CharacterAnimationState();

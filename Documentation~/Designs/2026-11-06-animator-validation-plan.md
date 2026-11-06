@@ -103,10 +103,10 @@ Files: create `Runtime/AnimatorValidation/CharacterMotorSystem.cs`, `CharacterBo
 
 Interfaces: ECS entities use the same graph/model/motor math, per-instance parameters and fixed-seed bot state. Camera/input bridge only writes input data; all character state/motion/pose is ECS. Bots use goals/local separation, jumps/actions and explicit death-respawn reset.
 
-- [ ] Write failing integration tests: exactly 1/100 active entities, graph definition shared once, finite successful palettes, no runtime Animator/PlayableGraph, independent deterministic bot behavior and respawn.
-- [ ] Implement authoring, shared motor jobs, bot steering and input bridge; build scenes with same arena and visual comparison camera presets.
-- [ ] Replay identical input trace in GO/ECS: compare motor transforms/clock separately from bone pose. Exercise all action categories, layer weights and debug tree modes.
-- [ ] Play-test both scenes and record warm-up/frame statistics for 100 complex-graph bots separately from old 1000 simple-graph benchmark. Commit.
+- [x] Write failing integration tests: exactly 1/100 active entities, graph definition shared once, finite successful palettes, no runtime Animator/PlayableGraph, independent deterministic bot behavior and respawn.
+- [x] Implement authoring, shared motor jobs, bot steering and input bridge; build scenes with same arena and visual comparison camera presets.
+- [x] Replay identical input trace in GO/ECS: compare motor transforms/clock separately from bone pose. Exercise all action categories, layer weights and debug tree modes.
+- [x] Play-test both scenes and record warm-up/frame statistics for 100 complex-graph bots separately from old 1000 simple-graph benchmark. Commit.
 
 ## Task 8 — full regression, consumption layouts and manual verification
 

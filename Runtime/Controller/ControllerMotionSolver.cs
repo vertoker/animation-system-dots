@@ -128,6 +128,7 @@ namespace AnimationSystemDOTS
         public static void Emit(ref AnimatorControllerBlob graph, ref AnimationLibraryBlob library, ref ControllerStateDefinition state,
             DynamicBuffer<ControllerMotionValue> scratch, double previous, double time, float weight, ulong sequence, DynamicBuffer<AnimationClipRequest> requests)
         {
+            var start = requests.Length;
             for (var i = 0; i < scratch.Length; i++) { var value = scratch[i]; value.Weight = 0; scratch[i] = value; }
             var root = scratch[state.Motion]; root.Weight = weight;
             root.PreviousTime = state.Speed < 0 ? 1 - previous - state.CycleOffset : previous + state.CycleOffset;
@@ -160,6 +161,11 @@ namespace AnimationSystemDOTS
                     child.PhaseOffset = reverse ? -value.PhaseOffset - offset : value.PhaseOffset + offset; scratch[edge.Motion] = child;
                 }
             }
+            // The reverse post-order walk visits rightmost leaves first. Restore
+            // authored order: native quaternion means align to the accumulated
+            // mean, so order affects large turns.
+            for (int left = start, right = requests.Length - 1; left < right; left++, right--)
+            { var temporary = requests[left]; requests[left] = requests[right]; requests[right] = temporary; }
         }
     }
 }

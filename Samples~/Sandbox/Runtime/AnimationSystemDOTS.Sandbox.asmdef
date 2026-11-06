@@ -1,4 +1,4 @@
 {
   "name": "AnimationSystemDOTS.Sandbox",
-  "references": ["AnimationSystemDOTS.Core", "AnimationSystemDOTS.Rendering", "Unity.Entities", "Unity.Transforms", "Unity.Collections", "Unity.Mathematics", "Unity.Deformations", "Unity.Scenes", "Unity.Entities.Graphics", "Unity.Burst"]
+  "references": ["AnimationSystemDOTS.Core", "AnimationSystemDOTS.Humanoid", "AnimationSystemDOTS.Rendering", "Unity.Entities", "Unity.Transforms", "Unity.Collections", "Unity.Mathematics", "Unity.Deformations", "Unity.Scenes", "Unity.Entities.Graphics", "Unity.Burst"]
 }

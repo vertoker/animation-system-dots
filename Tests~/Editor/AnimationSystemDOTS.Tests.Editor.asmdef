@@ -16,7 +16,8 @@
     "Unity.Scenes",
     "Unity.Scenes.Editor",
     "Unity.Mathematics.Extensions",
-    "AnimationSystemDOTS.Sandbox.Editor"
+    "AnimationSystemDOTS.Sandbox.Editor",
+    "AnimationSystemDOTS.Sandbox"
   ],
   "includePlatforms": [
     "Editor"

@@ -25,20 +25,21 @@ namespace AnimationSystemDOTS.Sandbox
     }
     public static class CharacterTestTrace
     {
-        // Forty-eight seconds, fixed tick identity. Both native and ECS consume
+        public const int TickCount = 3600;
+        // Sixty seconds, fixed tick identity. Both native and ECS consume
         // this command stream without consulting devices or frame delta time.
         public static CharacterCommand Sample(ulong tick)
         {
-            var frame = (int)(tick % 2880); var time = frame * AnimatorValidationSettings.Step;
-            var command = new CharacterCommand { TreeMode = frame / 360 % 5, Variant = frame / 120 % 3,
+            var frame = (int)(tick % TickCount); var time = frame * AnimatorValidationSettings.Step;
+            var command = new CharacterCommand { TreeMode = frame / 360 % 5, Variant = frame / 137 % 3,
                 Variation = frame / 180 % 5, PoseTime = .5f + .4f * math.sin(time), Cycle = frame / 600 % 4 * .25f,
-                Scrub = frame >= 2100 && frame < 2220 ? (byte)1 : (byte)0, Reset = frame == 2640 ? (byte)1 : (byte)0 };
-            command.Motor = new CharacterMotorInput { Move = frame < 60 || frame >= 2400 && frame < 2640 ? float2.zero : new float2(math.sin(time * .7f), math.cos(time * .7f)),
-                Sprint = frame / 240 % 2 == 1 ? (byte)1 : (byte)0, Strafe = 1, CameraYaw = 0, Jump = frame % 180 == 120 ? (byte)1 : (byte)0 };
+                Scrub = frame >= 2100 && frame < 2220 ? (byte)1 : (byte)0, Reset = frame == 2820 || frame == 3120 || frame == 3360 ? (byte)1 : (byte)0 };
+            command.Motor = new CharacterMotorInput { Move = frame < 60 || frame >= 2400 && frame < 2820 ? float2.zero : new float2(math.sin(time * .7f), math.cos(time * .7f)),
+                Sprint = frame / 240 % 2 == 1 ? (byte)1 : (byte)0, Strafe = command.TreeMode > 0 && command.TreeMode < 4 ? (byte)1 : (byte)0, CameraYaw = 0, Jump = frame % 180 == 120 ? (byte)1 : (byte)0 };
             if (frame % 480 == 90) command.Actions |= CharacterActions.Wave;
             if (frame % 480 == 270) command.Actions |= CharacterActions.Punch;
             if (frame % 360 == 210) command.Actions |= CharacterActions.React;
-            if (frame == 2400) command.Actions = CharacterActions.Die;
+            if (frame == 2400 || frame == 2880 || frame == 3180) { command.Actions = CharacterActions.Die; command.Variant = frame == 2400 ? 0 : frame == 2880 ? 1 : 2; }
             return command;
         }
     }

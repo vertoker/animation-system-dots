@@ -37,7 +37,7 @@ namespace AnimationSystemDOTS.Sandbox.Tests
                 Assert.That(scene.GetRootGameObjects().SelectMany(x => x.GetComponentsInChildren<Camera>(true)).Any(), Is.True);
                 Assert.That(scene.GetRootGameObjects().SelectMany(x => x.GetComponentsInChildren<Light>(true)).Any(), Is.True);
                 Assert.That(scene.GetRootGameObjects().SelectMany(x => x.GetComponentsInChildren<MonoBehaviour>(true))
-                    .Any(x => x != null && x.GetType().Name == "NativeAnimatorPlayer"), Is.True);
+                    .Any(x => x is NativeAnimatorCharacter), Is.True);
             }
             finally { EditorSceneManager.ClosePreviewScene(scene); }
         }

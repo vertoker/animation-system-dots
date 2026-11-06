@@ -6,6 +6,39 @@ namespace AnimationSystemDOTS
 {
     public static class AnimationApi
     {
+        /// <summary>Rebinds graph state and defaults, evaluating Entry before subsequent gameplay writes.
+        /// The owner must also reset its AnimationClock and pose/history buffers.</summary>
+        public static ControllerEvaluationResult ResetControllerState(in AnimationController controller, ref ControllerLayerState state,
+            DynamicBuffer<AnimationParameterValue> parameters, DynamicBuffer<ControllerLayerRuntime> layers, DynamicBuffer<ControllerCachedRequest> cache)
+        {
+            state = default; layers.Clear(); cache.Clear();
+            if (!controller.Definition.IsCreated || controller.Definition.Value.Version != AnimatorControllerBlob.CurrentVersion
+                || controller.Definition.Value.States.Length == 0)
+                return state.Result = ControllerEvaluationResult.InvalidDefinition;
+            ref var graph = ref controller.Definition.Value;
+            parameters.ResizeUninitialized(graph.Parameters.Length);
+            for (var p = 0; p < parameters.Length; p++) parameters[p] = new AnimationParameterValue
+                { Float = graph.Parameters[p].DefaultFloat, Int = graph.Parameters[p].DefaultInt };
+            var count = math.max(graph.Layers.Length, 1);
+            for (var l = 0; l < count; l++)
+            {
+                var layer = ControllerMachineRuntime.Layer(ref graph, l);
+                if (layer.SyncedLayer >= l) return state.Result = ControllerEvaluationResult.InvalidDefinition;
+                var initial = layer.SyncedLayer < 0 ? ControllerMachineRuntime.EntryLayer(ref graph, layer, parameters)
+                    : layer.StateStart + layers[layer.SyncedLayer].State.CurrentState - ControllerMachineRuntime.Layer(ref graph, layer.SyncedLayer).StateStart;
+                if (initial < layer.StateStart || initial >= layer.StateStart + layer.StateCount)
+                    return state.Result = ControllerEvaluationResult.InvalidDefinition;
+                layers.Add(new ControllerLayerRuntime { Weight = l == 0 ? 1 : layer.DefaultWeight,
+                    State = new ControllerLayerState { Definition = controller.Definition, Initialized = 1, CurrentState = initial,
+                        NextState = -1, ActiveTransition = -1, Sequence = 1, CurrentSequence = 1, Result = ControllerEvaluationResult.Success } });
+            }
+            for (var p = 0; p < parameters.Length; p++)
+            {
+                var value = parameters[p]; if (value.Consumed != 0) value.Int = 0;
+                value.Consumed = 0; parameters[p] = value;
+            }
+            state = layers[0].State; return state.Result;
+        }
         public static int FindLayer(in AnimationController controller, in FixedString128Bytes name)
         {
             if (controller.Definition.IsCreated)

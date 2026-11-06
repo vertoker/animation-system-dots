@@ -38,6 +38,8 @@ namespace AnimationSystemDOTS.Sandbox
             transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
         }
         void FixedUpdate()
+            => SimulateStep();
+        public void SimulateStep()
         {
             if (Animator == null || Settings == null) return;
             var command = AutomatedTrace ? CharacterTestTrace.Sample(Tick) : Command;
@@ -72,7 +74,7 @@ namespace AnimationSystemDOTS.Sandbox
             GUILayout.Label("05 | GameObject + native Animator | shared Bots100.controller");
             GUILayout.Label("WASD move | Shift sprint | Alt strafe | Space jump | RMB orbit");
             GUILayout.Label("1 wave | 2 punch | 3 reaction | 4 death | R reset | T trace | Tab tree | V variant | C cycle | F scrub");
-            if (GUILayout.Button(AutomatedTrace ? "Stop deterministic trace" : "Run deterministic trace (48 s loop)")) { AutomatedTrace = !AutomatedTrace; ResetCharacter(); }
+            if (GUILayout.Button(AutomatedTrace ? "Stop deterministic trace" : "Run deterministic trace (60 s loop)")) { AutomatedTrace = !AutomatedTrace; ResetCharacter(); }
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Reset")) ResetCharacter();
             if (GUILayout.Button("Tree: " + Command.TreeMode)) Command.TreeMode = (Command.TreeMode + 1) % 5;

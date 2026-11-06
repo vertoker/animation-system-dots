@@ -101,7 +101,7 @@ namespace AnimationSystemDOTS
                     BlendControllerStates(ref result, rig, requests, samples, layer, bone, count, ref history); return;
                 }
                 var position = float3.zero; var scale = float3.zero; var rotation = float4.zero;
-                var reference = quaternion.identity; var total = 0f; var influence = 0f; var mode = PoseBlendMode.Override;
+                var total = 0f; var influence = 0f; var mode = PoseBlendMode.Override;
                 for (var i = 0; i < requests.Length; i++)
                 {
                     var request = requests[i]; var sample = samples[i * count + bone];
@@ -116,9 +116,8 @@ namespace AnimationSystemDOTS
                         ref var additive = ref rig.Library.Value.Clips[request.Clip.Value].ReferencePose[bone];
                         p -= additive.Position; s -= additive.Scale; q = math.mul(math.inverse(additive.Rotation), q);
                     }
-                    if (total == 0) reference = q;
                     position += p * weight; scale += s * weight;
-                    rotation += q.value * (math.dot(reference.value, q.value) < 0 ? -weight : weight); total += weight;
+                    rotation += q.value * (math.dot(rotation, q.value) < 0 ? -weight : weight); total += weight;
                 }
                 if (total <= 0 || influence <= 0) return;
                 influence = math.saturate(influence); var missing = math.max(0, influence - total);
@@ -135,7 +134,7 @@ namespace AnimationSystemDOTS
                 else
                 {
                     var rest = rig.Rig.Value.RestLocalPoses[bone];
-                    rotation += rest.Rotation.value * (math.dot(reference.value, rest.Rotation.value) < 0 ? -missing : missing);
+                    rotation += rest.Rotation.value * (math.dot(rotation, rest.Rotation.value) < 0 ? -missing : missing);
                     var pose = new BoneLocalPose { Position = (position + rest.Position * missing) / influence,
                         Scale = (scale + rest.Scale * missing) / influence,
                         Rotation = math.normalizesafe(new quaternion(rotation), rest.Rotation) };
@@ -153,7 +152,7 @@ namespace AnimationSystemDOTS
                 for (var slot = 0; slot < 2; slot++)
                 {
                     var p = float3.zero; var s = float3.zero; var q = float4.zero;
-                    var qReference = quaternion.identity; var motionTotal = 0f; var stateWeight = 0f;
+                    var motionTotal = 0f; var stateWeight = 0f;
                     for (var r = 0; r < requests.Length; r++)
                     {
                         var request = requests[r]; var sample = samples[r * count + bone];
@@ -178,9 +177,8 @@ namespace AnimationSystemDOTS
                             ref var additive = ref rig.Library.Value.Clips[request.Clip.Value].ReferencePose[bone];
                             pose.Position -= additive.Position; pose.Scale -= additive.Scale; pose.Rotation = math.mul(math.inverse(additive.Rotation), pose.Rotation);
                         }
-                        if (motionTotal == 0) qReference = pose.Rotation;
                         p += pose.Position * request.MotionWeight; s += pose.Scale * request.MotionWeight;
-                        q += pose.Rotation.value * (math.dot(qReference.value, pose.Rotation.value) < 0 ? -request.MotionWeight : request.MotionWeight);
+                        q += pose.Rotation.value * (math.dot(q, pose.Rotation.value) < 0 ? -request.MotionWeight : request.MotionWeight);
                         motionTotal += request.MotionWeight;
                     }
                     if (motionTotal <= 0 || stateWeight <= 0) continue;
@@ -188,7 +186,7 @@ namespace AnimationSystemDOTS
                     {
                         var rest = rig.Rig.Value.RestLocalPoses[bone]; var missing = math.max(0, 1 - motionTotal);
                         p += rest.Position * missing; s += rest.Scale * missing;
-                        q += rest.Rotation.value * (math.dot(qReference.value, rest.Rotation.value) < 0 ? -missing : missing);
+                        q += rest.Rotation.value * (math.dot(q, rest.Rotation.value) < 0 ? -missing : missing);
                     }
                     var stateRotation = math.normalizesafe(new quaternion(q), quaternion.identity);
                     if (total == 0) reference = stateRotation;

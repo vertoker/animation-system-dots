@@ -79,6 +79,28 @@ namespace AnimationSystemDOTS.Tests
             }
         }
         [Test]
+        public void ResetState_SelectsEntryUsingDefaultsBeforeGameplayWritesNewInputs()
+        {
+            Configure(); Tick(1, .1); var em = world.EntityManager;
+            using (var builder = new BlobBuilder(Allocator.Temp))
+            {
+                ref var root = ref builder.ConstructRoot<AnimatorControllerBlob>(); root.Version = AnimatorControllerBlob.CurrentVersion; root.LibraryKey = library.Value.ContentKey; root.EntryCount = 1;
+                builder.Allocate(ref root.Parameters, 1)[0] = new AnimationParameterDefinition { Name = "Enabled", Type = AnimationParameterType.Bool, DefaultInt = 1 };
+                var states = builder.Allocate(ref root.States, 2);
+                for (var i = 0; i < 2; i++) states[i] = new ControllerStateDefinition { Clip = new ClipId(i), Duration = i + 1, Speed = 1, SpeedParameter = -1 };
+                builder.Allocate(ref root.Transitions, 1)[0] = new ControllerTransitionDefinition { Destination = 1, ConditionCount = 1 };
+                builder.Allocate(ref root.Conditions, 1)[0] = new ControllerCondition { Parameter = 0, Mode = ControllerConditionMode.If };
+                replacement = builder.CreateBlobAssetReference<AnimatorControllerBlob>(Allocator.Persistent);
+            }
+            var controller = new AnimationController { Definition = replacement }; var state = em.GetComponentData<ControllerLayerState>(rigEntity);
+            em.SetComponentData(rigEntity, controller);
+            Assert.That(AnimationApi.ResetControllerState(controller, ref state, em.GetBuffer<AnimationParameterValue>(rigEntity), em.GetBuffer<ControllerLayerRuntime>(rigEntity), em.GetBuffer<ControllerCachedRequest>(rigEntity)), Is.EqualTo(ControllerEvaluationResult.Success));
+            Assert.That(state.CurrentState, Is.EqualTo(1)); Assert.That(state.NormalizedTime, Is.Zero);
+            em.SetComponentData(rigEntity, state); em.SetComponentData(rigEntity, new AnimationClock()); em.GetBuffer<ControllerBoneHistory>(rigEntity).Clear();
+            AnimationApi.SetBool(controller, em.GetBuffer<AnimationParameterValue>(rigEntity), new AnimationParameterId(0), false); Tick(2, .1);
+            Assert.That(em.GetComponentData<ControllerLayerState>(rigEntity).CurrentState, Is.EqualTo(1), "Entry has already evaluated like Animator.Rebind/Update(0); new gameplay inputs must not select a different initial state.");
+        }
+        [Test]
         public void DefinitionReplacement_InvalidatesPriorPoseCaptureOnTheSameTick()
         {
             Configure(); var em = world.EntityManager; Tick(1, .1); Trigger(0); Tick(2, .1); Tick(3, .15); Trigger(1); Tick(4, .1);

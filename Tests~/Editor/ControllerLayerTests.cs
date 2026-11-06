@@ -20,6 +20,7 @@ namespace AnimationSystemDOTS.Tests
     {
         [TestCase("multiway")]
         [TestCase("nestedQuaternions")]
+        [TestCase("wideQuaternions")]
         [TestCase("override0")]
         [TestCase("overridePartial")]
         [TestCase("override1")]
@@ -65,6 +66,7 @@ namespace AnimationSystemDOTS.Tests
                     foreach (var path in new[] { "BoneA", "BoneA/Child", "BoneB" })
                     {
                         var rotation = Quaternion.Euler(i == 0 ? new Vector3(70, 0, 0) : i == 1 ? new Vector3(0, -85, 20) : new Vector3(10, 25, 100));
+                        if (scenario == "wideQuaternions") rotation = Quaternion.Euler(0, i == 0 ? 178 : i == 1 ? 15 : -73, 0);
                         for (var c = 0; c < 4; c++) clips[i].SetCurve(path, typeof(Transform), "m_LocalRotation." + "xyzw"[c], AnimationCurve.Constant(0, i + 1, rotation[c]));
                         clips[i].SetCurve(path, typeof(Transform), "m_LocalPosition.x", AnimationCurve.Linear(0, i * .3f, i + 1, i * .3f + .2f));
                         clips[i].SetCurve(path, typeof(Transform), "m_LocalPosition.y", AnimationCurve.Constant(0, i + 1, path.EndsWith("Child") ? 1 : .1f * i));
@@ -82,7 +84,7 @@ namespace AnimationSystemDOTS.Tests
                 tree.children = new[] { new ChildMotion { motion = clips[0], timeScale = 1, directBlendParameter = "W0" },
                     new ChildMotion { motion = clips[1], timeScale = 1, directBlendParameter = "W1" }, new ChildMotion { motion = clips[2], timeScale = 1, directBlendParameter = "W2" } };
                 var serialized = new SerializedObject(tree); serialized.FindProperty("m_NormalizedBlendValues").boolValue = true; serialized.ApplyModifiedPropertiesWithoutUndo();
-                var multiway = scenario == "multiway" || scenario == "nestedQuaternions";
+                var multiway = scenario == "multiway" || scenario == "nestedQuaternions" || scenario == "wideQuaternions";
                 Motion baseMotion = multiway ? (Motion)tree : clips[0];
                 if (scenario == "nestedQuaternions")
                 {

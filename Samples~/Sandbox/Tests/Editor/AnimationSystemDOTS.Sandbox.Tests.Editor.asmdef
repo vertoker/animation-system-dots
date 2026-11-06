@@ -3,7 +3,11 @@
   "references": [
     "AnimationSystemDOTS.Sandbox",
     "AnimationSystemDOTS.Core",
+    "AnimationSystemDOTS.Humanoid",
+    "AnimationSystemDOTS.Rendering",
+    "Unity.Deformations",
     "Unity.Entities",
+    "Unity.Scenes",
     "Unity.Transforms",
     "Unity.Collections",
     "Unity.Mathematics"

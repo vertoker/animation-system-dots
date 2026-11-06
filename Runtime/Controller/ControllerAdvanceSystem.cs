@@ -112,9 +112,7 @@ namespace AnimationSystemDOTS
             }
 
             static ControllerLayerDefinition Layer(ref AnimatorControllerBlob graph, int index)
-                => graph.Layers.Length > 0 ? graph.Layers[index] : new ControllerLayerDefinition
-                { StateCount = graph.States.Length, DefaultState = graph.DefaultState, AnyStart = graph.AnyStart, AnyCount = graph.AnyCount,
-                    EntryStart = graph.EntryStart, EntryCount = graph.EntryCount, DefaultWeight = 1, SyncedLayer = -1, Mask = -1 };
+                => ControllerMachineRuntime.Layer(ref graph, index);
 
             static void AdvanceLayer(ref AnimatorControllerBlob graph, ref AnimationLibraryBlob library, BlobAssetReference<AnimatorControllerBlob> owner,
                 ref ControllerLayerState state, ControllerLayerDefinition layer, int layerIndex, double dt, float weight,
@@ -285,16 +283,7 @@ namespace AnimationSystemDOTS
                     LoopBoundary = state.Speed < 0 ? ClipLoopBoundary.End : ClipLoopBoundary.Start, Weight = weight, StateWeight = weight, MotionWeight = 1, StateSlot = slot, InstanceSequence = sequence });
             }
             static int Entry(ref AnimatorControllerBlob graph, ControllerLayerDefinition layer, DynamicBuffer<AnimationParameterValue> parameters)
-            {
-                if (graph.Machines.Length > 0) return ControllerMachineRuntime.Entry(ref graph, layer.RootMachine, parameters, true);
-                for (var i = 0; i < layer.EntryCount; i++)
-                {
-                    ref var edge = ref graph.Transitions[layer.EntryStart + i];
-                    if (!Matches(ref graph, ref edge, parameters)) continue;
-                    Consume(ref graph, ref edge, parameters); return edge.Destination;
-                }
-                return layer.DefaultState;
-            }
+                => ControllerMachineRuntime.EntryLayer(ref graph, layer, parameters);
             static int FindInterruption(ref AnimatorControllerBlob graph, ControllerLayerDefinition layer, ref ControllerLayerState state,
                 double previous, double nextPrevious, DynamicBuffer<AnimationParameterValue> parameters, out int source, out double remaining)
             {

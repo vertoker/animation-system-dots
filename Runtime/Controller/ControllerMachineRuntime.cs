@@ -4,6 +4,22 @@ namespace AnimationSystemDOTS
 {
     internal static class ControllerMachineRuntime
     {
+        internal static ControllerLayerDefinition Layer(ref AnimatorControllerBlob graph, int index)
+            => graph.Layers.Length > 0 ? graph.Layers[index] : new ControllerLayerDefinition
+            { StateCount = graph.States.Length, DefaultState = graph.DefaultState, AnyStart = graph.AnyStart, AnyCount = graph.AnyCount,
+                EntryStart = graph.EntryStart, EntryCount = graph.EntryCount, DefaultWeight = 1, SyncedLayer = -1, Mask = -1 };
+
+        internal static int EntryLayer(ref AnimatorControllerBlob graph, ControllerLayerDefinition layer, DynamicBuffer<AnimationParameterValue> parameters)
+        {
+            if (graph.Machines.Length > 0) return Entry(ref graph, layer.RootMachine, parameters, true);
+            for (var i = 0; i < layer.EntryCount; i++)
+            {
+                ref var edge = ref graph.Transitions[layer.EntryStart + i];
+                if (!ControllerConditions.Matches(ref graph, ref edge, parameters)) continue;
+                ControllerConditions.Consume(ref graph, ref edge, parameters); return edge.Destination;
+            }
+            return layer.DefaultState;
+        }
         internal static bool IsAncestor(ref AnimatorControllerBlob graph, int ancestor, int machine)
         {
             for (var steps = 0; machine >= 0 && steps <= graph.Machines.Length; steps++)

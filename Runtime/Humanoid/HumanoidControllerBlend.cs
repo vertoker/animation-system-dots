@@ -110,7 +110,7 @@ namespace AnimationSystemDOTS.Humanoid
             pose = new StatePose { Rotation = quaternion.identity }; pose.Muscles.Length = 95;
             for (var m = 0; m < 95; m++) pose.Muscles[m] = 0;
             error = HumanoidEvaluationResult.InvalidChannels;
-            var rotation = float4.zero; var reference = quaternion.identity; var total = 0f;
+            var rotation = float4.zero; var total = 0f;
             for (var r = 0; r < requests.Length; r++)
             {
                 var request = requests[r]; if (request.Layer != layer || request.StateSlot != slot) continue;
@@ -150,11 +150,12 @@ namespace AnimationSystemDOTS.Humanoid
                 var position = math.lerp(a.Position, b.Position, alpha); var q = math.slerp(a.Rotation, b.Rotation, alpha);
                 if (mode == PoseBlendMode.Additive) { position -= clip.HumanReferenceBody.Position; q = math.mul(math.inverse(clip.HumanReferenceBody.Rotation), q); }
                 if (!math.all(math.isfinite(position)) || !math.all(math.isfinite(q.value)) || math.lengthsq(q.value) < .5f) return false;
-                if (total == 0) reference = q;
                 pose.Position += position * request.MotionWeight;
-                rotation += q.value * (math.dot(reference.value, q.value) < 0 ? -request.MotionWeight : request.MotionWeight); total += request.MotionWeight;
+                // Native aligns each next rotation to the accumulated mean,
+                // not permanently to the first leaf. Large turns distinguish it.
+                rotation += q.value * (math.dot(rotation, q.value) < 0 ? -request.MotionWeight : request.MotionWeight); total += request.MotionWeight;
             }
-            if (mode == PoseBlendMode.Override) rotation += quaternion.identity.value * (reference.value.w < 0 ? -math.max(0, 1 - total) : math.max(0, 1 - total));
+            if (mode == PoseBlendMode.Override) rotation += quaternion.identity.value * (rotation.w < 0 ? -math.max(0, 1 - total) : math.max(0, 1 - total));
             pose.Rotation = math.normalizesafe(new quaternion(rotation), quaternion.identity);
             return true;
         }
