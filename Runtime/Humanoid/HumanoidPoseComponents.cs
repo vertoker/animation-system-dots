@@ -24,4 +24,7 @@ namespace AnimationSystemDOTS.Humanoid
     }
 
     public struct HumanoidMuscleValue : IBufferElementData { public float Value; }
+    // Separate muscle state of layers that own the hips/root. Retargeting
+    // all masked muscle channels together must not counter-rotate that root.
+    public struct HumanoidRootMuscleValue : IBufferElementData { public float Value; }
 }

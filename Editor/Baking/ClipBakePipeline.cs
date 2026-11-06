@@ -66,9 +66,14 @@ namespace AnimationSystemDOTS.Editor.Baking
                     var count = duration == 0 ? 1 : checked((int)Math.Ceiling(duration * settings.SampleRate) + 1);
                     if (count > settings.MaximumSamplesPerClip) throw new ArgumentException(request.Clip.name + ": sample count exceeds MaximumSamplesPerClip.");
                     var step = count > 1 ? duration / (count - 1) : 0;
+                    var sourceSettings = AnimationUtility.GetAnimationClipSettings(request.Clip);
+                    var referenceClip = sourceSettings.hasAdditiveReferencePose
+                        ? (sourceSettings.additiveReferencePoseClip != null ? sourceSettings.additiveReferencePoseClip : request.Clip) : null;
                     var identity = Application.unityVersion + "|" + AnimationBakeVersion.Converter + "|" + AnimationBakeVersion.Schema + "|"
                         + request.Rig.Value.ContentKey + "|" + BakeContentKey.Asset(request.Clip) + "|" + request.AdditionalDependencyKey + "|"
-                        + JsonUtility.ToJson(settings) + "|" + EditorJsonUtility.ToJson(sampler.Clip) + sampler.RootNormalizationIdentity;
+                        + JsonUtility.ToJson(settings) + "|" + EditorJsonUtility.ToJson(sampler.Clip) + sampler.RootNormalizationIdentity
+                        + "|reference:" + BakeContentKey.Asset(referenceClip) + "|" + BakeContentKey.Float(sourceSettings.additiveReferencePoseTime)
+                        + (referenceClip != null ? "|" + EditorJsonUtility.ToJson(referenceClip) : "");
                     result.ContentKey = BakeContentKey.Hash(identity);
                     if (!string.IsNullOrWhiteSpace(request.CacheDirectory)
                         && AnimationBlobCache.TryLoad(request.CacheDirectory, result.ContentKey, request.Rig.Value.ContentKey, out var cached))
@@ -80,6 +85,27 @@ namespace AnimationSystemDOTS.Editor.Baking
                     }
                     var frames = new BoneLocalPose[count][];
                     var preciseHuman = request.Clip.isHumanMotion && settings.HumanoidPoseMode == HumanoidPoseMode.PreciseMuscles;
+                    var referencePose = default(BoneLocalPose[]);
+                    var referenceMuscles = default(float[]); var referenceBody = BoneLocalPose.Identity;
+                    if (referenceClip != null)
+                    {
+                        var referenceTime = sourceSettings.additiveReferencePoseTime;
+                        if (!float.IsFinite(referenceTime) || referenceTime < 0 || referenceTime > referenceClip.length)
+                            throw new ArgumentException(request.Clip.name + ": additive reference time must be within the reference clip.");
+                        if (preciseHuman && !referenceClip.isHumanMotion)
+                            throw new ArgumentException(request.Clip.name + ": precise Humanoid additive reference must be a Humanoid clip.");
+                        using (IEditorClipSampler referenceSampler = referenceClip.isHumanMotion
+                            ? new HumanoidClipSampler(request.Source, referenceClip, request.Rig)
+                            : new EditorClipSampler(request.Source, referenceClip, request.Rig))
+                        {
+                            referencePose = referenceSampler.Sample(referenceTime);
+                            if (preciseHuman)
+                            {
+                                referenceMuscles = new float[HumanTrait.MuscleCount];
+                                referenceBody = ((HumanoidClipSampler)referenceSampler).ReadHumanPose(referenceTime, referenceMuscles);
+                            }
+                        }
+                    }
                     var humanFrames = preciseHuman ? new float[count][] : null;
                     var bodyFrames = preciseHuman ? new BoneLocalPose[count] : null;
                     for (var frame = 0; frame < count; frame++)
@@ -112,12 +138,18 @@ namespace AnimationSystemDOTS.Editor.Baking
                         }
                         var bodies = builder.Allocate(ref data.HumanBody, count);
                         for (var frame = 0; frame < count; frame++) bodies[frame] = bodyFrames[frame];
+                        if (referenceMuscles != null)
+                        {
+                            data.HasHumanAdditiveReference = 1; data.HumanReferenceBody = referenceBody;
+                            var values = builder.Allocate(ref data.HumanReferenceMuscles, referenceMuscles.Length);
+                            for (var m = 0; m < values.Length; m++) values[m] = referenceMuscles[m];
+                        }
                     }
                     var tracks = builder.Allocate(ref data.Tracks, frames[0].Length);
                     var reference = builder.Allocate(ref data.ReferencePose, frames[0].Length);
                     for (var bone = 0; bone < tracks.Length; bone++)
                     {
-                        reference[bone] = request.Rig.Value.RestLocalPoses[bone];
+                        reference[bone] = referencePose != null ? referencePose[bone] : request.Rig.Value.RestLocalPoses[bone];
                         var constant = true;
                         for (var frame = 1; frame < count; frame++)
                             if (!Equal(frames[0][bone], frames[frame][bone])) { constant = false; break; }

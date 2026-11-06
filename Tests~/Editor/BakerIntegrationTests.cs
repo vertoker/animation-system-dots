@@ -342,6 +342,72 @@ namespace AnimationSystemDOTS.Tests
             DefaultWorldInitialization.AddSystemsToRootLevelSystemGroups(world, systems);
         }
 
+        [UnityTest]
+        public IEnumerator SubScene_PreciseHumanoidKeepsAvatarAssetAndRunsWithoutAnimatorCompanionsAfterReload()
+        {
+            var sampleRoot = AnimationSystemDOTS.Sandbox.Editor.SandboxPaths.Root;
+            var root = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(sampleRoot + "Humanoid/BaldMaleHumanoid.prefab"));
+            root.transform.SetPositionAndRotation(new Vector3(4, 0, -3), Quaternion.Euler(0, 37, 0));
+            root.transform.localScale = Vector3.one * 1.3f;
+            var settings = ScriptableObject.CreateInstance<AnimationBakeSettings>();
+            settings.HumanoidPoseMode = HumanoidPoseMode.PreciseMuscles;
+            settings.SampleRate = 960; settings.PositionTolerance = .002f; settings.AngleToleranceDegrees = .25f;
+            AssetDatabase.CreateAsset(settings, folder + "/PreciseSettings.asset");
+            root.GetComponent<AnimationRigAuthoring>().Settings = settings;
+            var clip = AssetDatabase.FindAssets("t:Model", new[] { sampleRoot + "Humanoid/Mixamo" }).Select(AssetDatabase.GUIDToAssetPath)
+                .Where(p => Path.GetFileName(p).StartsWith("Y_Bot_Idle_", StringComparison.Ordinal)).OrderBy(p => p.Length).ThenBy(p => p)
+                .SelectMany(AssetDatabase.LoadAllAssetsAtPath).OfType<AnimationClip>().First(c => !c.name.StartsWith("__preview"));
+            root.GetComponent<AnimationLibraryAuthoring>().Clips = new[] { clip };
+            var path = folder + "/PreciseHumanoid.unity";
+            Assert.That(EditorSceneManager.SaveScene(authoringScene, path), Is.True);
+            EditorSceneManager.CloseScene(authoringScene, true);
+            if (originalScene.IsValid() && originalScene.isLoaded) SceneManager.SetActiveScene(originalScene);
+            var beforeAnimators = Resources.FindObjectsOfTypeAll<Animator>().Count(a => a.gameObject.scene.IsValid());
+            CreateWorld(false, true);
+            DefaultWorldInitialization.AddSystemsToRootLevelSystemGroups(world, new[]
+            { typeof(AnimationSystemDOTS.Humanoid.HumanoidBlendSystem), typeof(AnimationSystemDOTS.Humanoid.HumanoidRetargetSystem) });
+            var em = world.EntityManager; var step = em.CreateEntity(typeof(AnimationStepContext));
+            for (var pass = 0; pass < 2; pass++)
+            {
+                var scene = SceneSystem.LoadSceneAsync(world.Unmanaged, new Unity.Entities.Hash128(AssetDatabase.AssetPathToGUID(path)),
+                    new SceneSystem.LoadParameters { Flags = SceneLoadFlags.BlockOnImport | SceneLoadFlags.BlockOnStreamIn });
+                yield return WaitUntil(() => SceneSystem.IsSceneLoaded(world.Unmanaged, scene), "Precise Humanoid SubScene did not load.");
+                using (var query = em.CreateEntityQuery(typeof(AnimationRig), typeof(AnimationSystemDOTS.Humanoid.HumanoidRigBinding)))
+                {
+                    Assert.That(query.CalculateEntityCount(), Is.EqualTo(1));
+                    var entity = query.GetSingletonEntity();
+                    var binding = em.GetComponentData<AnimationSystemDOTS.Humanoid.HumanoidRigBinding>(entity);
+                    Assert.That(binding.Avatar.Value != null && binding.Avatar.Value.isHuman && binding.Avatar.Value.isValid, Is.True,
+                        "UnityObjectRef<Avatar> must survive scene streaming.");
+                    var data = em.GetComponentData<AnimationRig>(entity);
+                    Assert.That(data.Library.Value.Clips[0].HumanMuscles.Length, Is.EqualTo(HumanTrait.MuscleCount));
+                    em.GetBuffer<ScriptedPlaybackCommand>(entity).Add(ScriptedPlaybackCommand.Play(new ClipId(0), 1, .37));
+                    em.SetComponentData(step, new AnimationStepContext { Tick = (ulong)pass + 1, Mode = AnimationStepMode.Seek });
+                    world.Update(); em.CompleteAllTrackedJobs();
+                    Assert.That(em.GetComponentData<AnimationSystemDOTS.Humanoid.HumanoidBodyPose>(entity).Result,
+                        Is.EqualTo(AnimationSystemDOTS.Humanoid.HumanoidEvaluationResult.Success));
+                    var local = em.GetBuffer<BoneLocalPose>(entity); var model = em.GetBuffer<BoneModelPose>(entity);
+                    Assert.That(local.Length, Is.EqualTo(data.Rig.Value.Paths.Length)); Assert.That(model.Length, Is.EqualTo(local.Length));
+                    var maximumMovement = 0f;
+                    for (var bone = 0; bone < local.Length; bone++)
+                    {
+                        Assert.That(PoseValidation.IsValid(local[bone]), Is.True);
+                        maximumMovement = Mathf.Max(maximumMovement, Quaternion.Angle(local[bone].Rotation, data.Rig.Value.RestLocalPoses[bone].Rotation));
+                    }
+                    Assert.That(maximumMovement, Is.GreaterThan(20), "A valid result must contain the idle pose, not a static T-pose.");
+                    var matrix = em.GetComponentData<Unity.Transforms.LocalToWorld>(entity).Value;
+                    Assert.That(Unity.Mathematics.math.distance(matrix.c3.xyz, new Unity.Mathematics.float3(4, 0, -3)), Is.LessThan(.0001f));
+                    Assert.That(Resources.FindObjectsOfTypeAll<Animator>().Count(a => a.gameObject.scene.IsValid()), Is.EqualTo(beforeAnimators),
+                        "The streamed ECS character must not introduce a companion Animator.");
+                }
+                SceneSystem.UnloadScene(world.Unmanaged, scene);
+                world.Update(); em.CompleteAllTrackedJobs();
+                using (var query = em.CreateEntityQuery(typeof(AnimationSystemDOTS.Humanoid.HumanoidRigBinding)))
+                    yield return WaitUntil(() => query.CalculateEntityCount() == 0, "Unloaded Humanoid rig was retained.");
+                world.Update(); em.CompleteAllTrackedJobs();
+            }
+        }
+
         IEnumerator WaitUntil(Func<bool> condition, string message)
         {
             var deadline = EditorApplication.timeSinceStartup + 30;

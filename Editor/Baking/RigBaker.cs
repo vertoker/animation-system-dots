@@ -50,6 +50,11 @@ namespace AnimationSystemDOTS.Editor.Baking
                 foreach (var input in inputs)
                 {
                     DependsOn(input);
+                    if (input != null)
+                    {
+                        var referenceClip = UnityEditor.AnimationUtility.GetAnimationClipSettings(input).additiveReferencePoseClip;
+                        if (referenceClip != null) DependsOn(referenceClip);
+                    }
                     var result = ClipBakePipeline.Bake(new ClipBakeRequest
                     {
                         Source = authoring.gameObject, Clip = input, Rig = rig, Settings = authoring.Settings,
@@ -109,6 +114,7 @@ namespace AnimationSystemDOTS.Editor.Baking
                     AddComponent(entity, new Humanoid.HumanoidRigBinding { Avatar = animator.avatar });
                     AddComponent(entity, new Humanoid.HumanoidBodyPose());
                     AddBuffer<Humanoid.HumanoidMuscleValue>(entity);
+                    AddBuffer<Humanoid.HumanoidRootMuscleValue>(entity);
                 }
                 AddComponent(entity, ClipPlaybackState.Initial);
                 AddBuffer<ScriptedPlaybackCommand>(entity);

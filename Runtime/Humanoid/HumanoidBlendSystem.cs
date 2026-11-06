@@ -1,4 +1,5 @@
 using Unity.Burst;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 
@@ -16,58 +17,134 @@ namespace AnimationSystemDOTS.Humanoid
         partial struct BlendJob : IJobEntity
         {
             void Execute(in HumanoidRigBinding binding, in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests,
-                ref HumanoidBodyPose body, DynamicBuffer<HumanoidMuscleValue> muscles)
+                ref HumanoidBodyPose body, DynamicBuffer<HumanoidMuscleValue> muscles, DynamicBuffer<HumanoidRootMuscleValue> rootMuscles)
             {
                 body = new HumanoidBodyPose { Rotation = quaternion.identity, Result = HumanoidEvaluationResult.NoRequests };
                 muscles.ResizeUninitialized(95);
+                rootMuscles.Clear();
                 for (var m = 0; m < muscles.Length; m++) muscles[m] = default;
                 if (requests.Length == 0) return;
-                if (!rig.Rig.IsCreated || !rig.Library.IsCreated || rig.Library.Value.Version != AnimationBakeVersion.Schema
+                if (!rig.Rig.IsCreated || rig.Rig.Value.Version != AnimationBakeVersion.Schema || !rig.Library.IsCreated || rig.Library.Value.Version != AnimationBakeVersion.Schema
                     || rig.Library.Value.RigKey != rig.Rig.Value.ContentKey)
                 { body.Result = HumanoidEvaluationResult.InvalidDefinition; return; }
-                double total = 0; var rotation = float4.zero; var reference = quaternion.identity; var layer = requests[0].Layer;
-                for (var r = 0; r < requests.Length; r++)
+                rootMuscles.ResizeUninitialized(95);
+                for (var m = 0; m < 95; m++) rootMuscles[m] = default;
+                var firstLayer = true; var previousLayer = 0; var contributed = false; var rootContributed = false;
+                for (var pass = 0; pass < requests.Length; pass++)
                 {
-                    var request = requests[r];
-                    if (!math.isfinite(request.Weight) || request.Weight <= 0) continue;
-                    if ((uint)request.Clip.Value >= (uint)rig.Library.Value.Clips.Length || !math.isfinite(request.Time))
-                    { body.Result = HumanoidEvaluationResult.InvalidChannels; return; }
-                    if (request.BlendMode != PoseBlendMode.Override)
-                    { body.Result = HumanoidEvaluationResult.UnsupportedBlendMode; return; }
-                    if (request.Mask.IsCreated) { body.Result = HumanoidEvaluationResult.UnsupportedMask; return; }
-                    if (request.Layer != layer) { body.Result = HumanoidEvaluationResult.UnsupportedLayer; return; }
-                    ref var clip = ref rig.Library.Value.Clips[request.Clip.Value];
-                    if (clip.Version != AnimationBakeVersion.Schema || clip.RigKey != rig.Rig.Value.ContentKey
-                        || clip.HumanMuscles.Length != 95 || clip.HumanBody.Length != clip.SampleCount || clip.SampleCount < 1
-                        || clip.Duration > 0 && (clip.SampleCount < 2 || !math.isfinite(clip.SampleStep) || clip.SampleStep <= 0))
-                    { body.Result = HumanoidEvaluationResult.InvalidChannels; return; }
-                    Interval(ref clip, request.Time, request.LoopBoundary, out var first, out var alpha);
-                    for (var m = 0; m < muscles.Length; m++)
+                    var found = false; var layer = int.MaxValue;
+                    for (var r = 0; r < requests.Length; r++)
+                        if ((firstLayer || requests[r].Layer > previousLayer) && (!found || requests[r].Layer < layer))
+                        { layer = requests[r].Layer; found = true; }
+                    if (!found) break;
+                    firstLayer = false; previousLayer = layer;
+                    var values = new FixedList512Bytes<float>(); values.Length = 95;
+                    var totals = new FixedList512Bytes<float>(); totals.Length = 95;
+                    var rootValues = new FixedList512Bytes<float>(); rootValues.Length = 95;
+                    var rootTotals = new FixedList512Bytes<float>(); rootTotals.Length = 95;
+                    for (var m = 0; m < 95; m++) { values[m] = 0; totals[m] = 0; rootValues[m] = 0; rootTotals[m] = 0; }
+                    var position = float3.zero; var rotation = float4.zero; double bodyTotal = 0;
+                    var reference = quaternion.identity; var hasMode = false; var mode = PoseBlendMode.Override;
+                    for (var r = 0; r < requests.Length; r++)
                     {
-                        ref var samples = ref clip.HumanMuscles[m].Samples;
-                        if (samples.Length != 1 && samples.Length != clip.SampleCount)
+                        var request = requests[r]; if (request.Layer != layer) continue;
+                        if (!math.isfinite(request.Weight)) { body.Result = HumanoidEvaluationResult.InvalidChannels; return; }
+                        if (request.Weight <= 0) continue;
+                        if ((uint)request.Clip.Value >= (uint)rig.Library.Value.Clips.Length || !math.isfinite(request.Time))
                         { body.Result = HumanoidEvaluationResult.InvalidChannels; return; }
-                        var value = samples.Length == 1 ? samples[0] : math.lerp(samples[first], samples[first + 1], alpha);
-                        if (!math.isfinite(value)) { body.Result = HumanoidEvaluationResult.InvalidChannels; return; }
-                        muscles[m] = new HumanoidMuscleValue { Value = muscles[m].Value + value * request.Weight };
+                        if (hasMode && mode != request.BlendMode || request.BlendMode != PoseBlendMode.Override && request.BlendMode != PoseBlendMode.Additive)
+                        { body.Result = HumanoidEvaluationResult.UnsupportedBlendMode; return; }
+                        hasMode = true; mode = request.BlendMode;
+                        if (request.Mask.IsCreated && (request.Mask.Value.Version != AnimationBakeVersion.Schema
+                            || request.Mask.Value.RigKey != rig.Rig.Value.ContentKey || request.Mask.Value.HumanMuscleWeights.Length != 95))
+                        { body.Result = HumanoidEvaluationResult.UnsupportedMask; return; }
+                        ref var clip = ref rig.Library.Value.Clips[request.Clip.Value];
+                        if (clip.Version != AnimationBakeVersion.Schema || clip.RigKey != rig.Rig.Value.ContentKey
+                            || clip.HumanMuscles.Length != 95 || clip.HumanBody.Length != clip.SampleCount || clip.SampleCount < 1
+                            || clip.Duration > 0 && (clip.SampleCount < 2 || !math.isfinite(clip.SampleStep) || clip.SampleStep <= 0))
+                        { body.Result = HumanoidEvaluationResult.InvalidChannels; return; }
+                        if (mode == PoseBlendMode.Additive && (clip.HasHumanAdditiveReference == 0 || clip.HumanReferenceMuscles.Length != 95))
+                        { body.Result = HumanoidEvaluationResult.UnsupportedBlendMode; return; }
+                        var rootWeight = request.Weight; var rootMaskWeight = 1f;
+                        if (request.Mask.IsCreated)
+                        {
+                            var maskWeight = request.Mask.Value.HumanRootWeight;
+                            if (!math.isfinite(maskWeight)) { body.Result = HumanoidEvaluationResult.UnsupportedMask; return; }
+                            rootMaskWeight = math.saturate(maskWeight); rootWeight *= rootMaskWeight;
+                        }
+                        if (rootWeight > 0) rootContributed = true;
+                        Interval(ref clip, request.Time, request.LoopBoundary, out var first, out var alpha);
+                        for (var m = 0; m < 95; m++)
+                        {
+                            ref var samples = ref clip.HumanMuscles[m].Samples;
+                            if (samples.Length != 1 && samples.Length != clip.SampleCount)
+                            { body.Result = HumanoidEvaluationResult.InvalidChannels; return; }
+                            var value = samples.Length == 1 ? samples[0] : math.lerp(samples[first], samples[first + 1], alpha);
+                            if (mode == PoseBlendMode.Additive) value -= clip.HumanReferenceMuscles[m];
+                            var weight = request.Weight;
+                            if (request.Mask.IsCreated)
+                            {
+                                var maskWeight = request.Mask.Value.HumanMuscleWeights[m];
+                                if (!math.isfinite(maskWeight)) { body.Result = HumanoidEvaluationResult.UnsupportedMask; return; }
+                                weight *= math.saturate(maskWeight);
+                            }
+                            if (!math.isfinite(value)) { body.Result = HumanoidEvaluationResult.InvalidChannels; return; }
+                            values[m] += value * weight; totals[m] += weight;
+                            // Root-enabled partial layers update the same masked
+                            // muscle channels as the visible pose. Root-off layers
+                            // leave this snapshot untouched, preserving prior hips.
+                            var rootMuscleWeight = weight * rootMaskWeight;
+                            rootValues[m] += value * rootMuscleWeight; rootTotals[m] += rootMuscleWeight;
+                        }
+                        var a = clip.HumanBody[first]; var b = clip.HumanBody[math.min(first + 1, clip.SampleCount - 1)];
+                        var p = math.lerp(a.Position, b.Position, alpha); var q = math.slerp(a.Rotation, b.Rotation, alpha);
+                        if (mode == PoseBlendMode.Additive)
+                        {
+                            p -= clip.HumanReferenceBody.Position;
+                            q = math.mul(math.inverse(clip.HumanReferenceBody.Rotation), q);
+                        }
+                        if (!math.all(math.isfinite(p)) || !math.all(math.isfinite(q.value)) || math.lengthsq(q.value) < .5f)
+                        { body.Result = HumanoidEvaluationResult.InvalidChannels; return; }
+                        var bodyWeight = rootWeight;
+                        if (bodyTotal == 0) reference = q;
+                        position += p * bodyWeight;
+                        rotation += q.value * (math.dot(reference.value, q.value) < 0 ? -bodyWeight : bodyWeight);
+                        bodyTotal += bodyWeight; contributed = true;
                     }
-                    var a = clip.HumanBody[first];
-                    var b = clip.HumanBody[math.min(first + 1, clip.SampleCount - 1)];
-                    var position = math.lerp(a.Position, b.Position, alpha);
-                    var q = math.slerp(a.Rotation, b.Rotation, alpha);
-                    if (!math.all(math.isfinite(position)) || !math.all(math.isfinite(q.value)) || math.lengthsq(q.value) < .5f)
-                    { body.Result = HumanoidEvaluationResult.InvalidChannels; return; }
-                    if (total == 0) reference = q;
-                    body.Position += position * request.Weight;
-                    rotation += q.value * (math.dot(reference.value, q.value) < 0 ? -request.Weight : request.Weight);
-                    total += request.Weight;
+                    if (!hasMode) continue;
+                    for (var m = 0; m < 95; m++)
+                    {
+                        var value = muscles[m].Value;
+                        if (mode == PoseBlendMode.Additive) value += values[m];
+                        else if (totals[m] > 0) value = math.lerp(value, values[m] / totals[m], math.saturate(totals[m]));
+                        muscles[m] = new HumanoidMuscleValue { Value = value };
+                        var rootValue = rootMuscles[m].Value;
+                        if (mode == PoseBlendMode.Additive) rootValue += rootValues[m];
+                        else if (rootTotals[m] > 0) rootValue = math.lerp(rootValue, rootValues[m] / rootTotals[m], math.saturate(rootTotals[m]));
+                        rootMuscles[m] = new HumanoidRootMuscleValue { Value = rootValue };
+                    }
+                    if (bodyTotal > 0)
+                    {
+                        var q = math.normalizesafe(new quaternion(rotation), quaternion.identity);
+                        if (mode == PoseBlendMode.Additive)
+                        {
+                            body.Position += position;
+                            body.Rotation = math.normalize(math.mul(body.Rotation, math.nlerp(quaternion.identity, q, (float)math.min(bodyTotal, 1))));
+                        }
+                        else
+                        {
+                            body.Position = math.lerp(body.Position, position / (float)bodyTotal, (float)math.min(bodyTotal, 1));
+                            body.Rotation = math.nlerp(body.Rotation, q, (float)math.min(bodyTotal, 1));
+                        }
+                    }
                 }
-                if (total <= 0) return;
-                var inverse = (float)(1 / total);
-                for (var m = 0; m < muscles.Length; m++) muscles[m] = new HumanoidMuscleValue { Value = muscles[m].Value * inverse };
-                body.Position *= inverse;
-                body.Rotation = math.normalizesafe(new quaternion(rotation), quaternion.identity);
-                body.Result = HumanoidEvaluationResult.Success;
+                if (!rootContributed) rootMuscles.Clear();
+                for (var m = 0; m < muscles.Length; m++)
+                    if (!math.isfinite(muscles[m].Value) || rootMuscles.Length != 0 && !math.isfinite(rootMuscles[m].Value))
+                    { body.Result = HumanoidEvaluationResult.InvalidChannels; return; }
+                if (!math.all(math.isfinite(body.Position)) || !math.all(math.isfinite(body.Rotation.value)) || math.abs(math.lengthsq(body.Rotation.value) - 1) > .001f)
+                { body.Result = HumanoidEvaluationResult.InvalidChannels; return; }
+                body.Result = contributed ? HumanoidEvaluationResult.Success : HumanoidEvaluationResult.NoRequests;
             }
 
             static void Interval(ref AnimationClipBlob clip, double time, ClipLoopBoundary boundary, out int first, out float alpha)

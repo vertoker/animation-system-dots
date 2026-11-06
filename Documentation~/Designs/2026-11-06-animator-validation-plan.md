@@ -32,24 +32,24 @@
 
 Files: create `Samples~/Sandbox/Editor/AnimatorValidationAssets.cs`, `Samples~/Sandbox/Tests/Editor/AnimatorValidationAssetTests.cs`, `Samples~/Sandbox/Humanoid/Mixamo/` and motion inventory; preserve `Sources~/Mixamo_Bots100` as private input.
 
-Interfaces: `AnimatorValidationAssets.ImportSources()` imports deterministically named FBX under `SandboxPaths.Root + "Humanoid/Mixamo/"`; `BuildInventory()` records source path/hash, model/avatar status, take length/frame rate/root/loop configuration and semantic role. Keep source variants distinct. Source skeleton's Avatar is created from source; target bald male Avatar remains the playback target.
+Interfaces: `AnimatorValidationAssets.ImportSources()` imports deterministically named FBX under `SandboxPaths.Root + "Humanoid/Mixamo/"`; `ImportFrom(string sourceRoot)` also records source path/hash, model/avatar status, take length/frame rate/root/loop configuration and semantic role. Keep source variants distinct. Source skeleton's Avatar is created from source; target bald male Avatar remains the playback target.
 
-- [ ] Write inventory/import tests: actual source variants map to unique assets; valid human clips, finite positive lengths, correct loop/action settings; missing input yields an actionable error without deleting existing assets.
-- [ ] Run red through Coplay EditMode tests; implement importer using verified ModelImporter APIs; import and record all usable motions, select approximately 25–40 useful clips after checking takes.
-- [ ] Run asset tests and inspect imported Avatar diagnostics. Commit assets, provenance and tests; never force-add private sources.
+- [x] Write inventory/import tests: actual source variants map to unique assets; valid human clips, finite positive lengths, correct loop/action settings; missing input yields an actionable error without deleting existing assets.
+- [x] Run red through Coplay EditMode tests; implement importer using verified ModelImporter APIs; import and record all usable motions, defer controller selection of approximately 25–40 useful clips to task 6.
+- [x] Run asset tests and inspect imported Avatar diagnostics. Commit assets, provenance and tests; never force-add private sources.
 
 ## Task 2 — real Humanoid blend accuracy gate
 
 Execution amendment (2026-11-06, after user selected exact Humanoid first): raw muscle blending plus public unbound `HumanPoseHandler` reproduces the native oracle. Add an opt-in `PreciseMuscles` bake/runtime path with an ECS-native data model and a separate `AnimationSystemDOTS.Humanoid` adapter assembly. The native retarget call is managed/main-thread, with no runtime GameObject/Animator/PlayableGraph; measured isolated 1000-target retarget cost 4.09 ms median / 4.70 ms p95, not a scene benchmark. Preserve the existing Burst target-TRS path for old samples. Do not ship a learned approximation of Unity's body-orientation correction as an exact replacement. Measure the complete ECS path before any performance claims.
 
-Files: create `Samples~/Sandbox/Tests/Editor/HumanoidBlendParityTests.cs`, editor oracle helper and generated reports under `DevProject~/Artifacts/Verification/AnimatorValidation/`.
+Files: create `Tests~/Editor/HumanoidRuntimeParityTests.cs`, archived exploratory probes under `Tools~/Probes` and generated reports under `DevProject~/Artifacts/Verification/AnimatorValidation/`.
 
 Interfaces: capture target-local and model-space poses at explicit clip times and graph weights using native manual PlayableGraph in a preview scene; compare with the existing baked-TRS sampler/blender, dispose graphs/scenes/blobs in finally.
 
-- [ ] Add failing native differential cases for single-clip baseline, 1D two-way, multi-way directional, upper-body masked override and additive reference pose, using imported idle/run/wave/punch motions.
-- [ ] Record max world joint distance and local rotation angle over significant/all target bones: investigative boundary 0.02 m / 2 degrees; preserve tighter existing baseline tolerances.
-- [ ] Establish whether errors come from sampling rate, quaternion mixing, additive reference or retargeting space. Fix the responsible representation/algorithm and pin with regression tests. If a substantial representation redesign is needed, ledger the evidence and revise dependent tasks before continuing; do not relax thresholds or claim parity.
-- [ ] Verify no leaked previews/graphs and commit the passing fixture with measured results.
+- [x] Add failing native differential cases for single-clip baseline, 1D two-way, multi-way directional, upper-body masked override and additive reference pose, using imported idle/run/wave/punch motions.
+- [x] Record max world joint distance and local rotation angle over significant/all target bones: investigative boundary 0.02 m / 2 degrees; preserve tighter existing baseline tolerances.
+- [x] Establish whether errors come from sampling rate, quaternion mixing, additive reference or retargeting space. Fix the responsible representation/algorithm and pin with regression tests. If a substantial representation redesign is needed, ledger the evidence and revise dependent tasks before continuing; do not relax thresholds or claim parity.
+- [x] Verify no leaked previews/graphs and commit the passing fixture with measured results.
 
 ## Task 3 — versioned motion trees and native weight solvers
 

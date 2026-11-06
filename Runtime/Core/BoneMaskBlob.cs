@@ -9,5 +9,7 @@ namespace AnimationSystemDOTS
         public FixedString128Bytes ContentKey;
         public FixedString128Bytes RigKey;
         public BlobArray<float> Weights;
+        public BlobArray<float> HumanMuscleWeights;
+        public float HumanRootWeight;
     }
 }

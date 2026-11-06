@@ -39,6 +39,8 @@ namespace AnimationSystemDOTS.Editor.Baking
                     for (var m = 0; m < clip.HumanMuscles.Length; m++)
                         if (clip.HumanMuscles[m].Samples.Length != 1 && clip.HumanMuscles[m].Samples.Length != clip.SampleCount)
                             return Failure($"Library clip {i}, muscle {m} has an invalid sample count.");
+                    if (clip.HasHumanAdditiveReference != 0 && clip.HumanReferenceMuscles.Length != 95)
+                        return Failure($"Library clip {i} has an invalid Humanoid additive reference.");
                 }
                 else if (clip.HumanBody.Length != 0) return Failure($"Library clip {i} has a body track without Humanoid muscle channels.");
                 identity.Append(':').Append(clip.ContentKey.ToString());
@@ -67,6 +69,8 @@ namespace AnimationSystemDOTS.Editor.Baking
             target.SampleStep = source.SampleStep;
             target.SampleCount = source.SampleCount;
             target.IsLooping = source.IsLooping;
+            target.HasHumanAdditiveReference = source.HasHumanAdditiveReference;
+            target.HumanReferenceBody = source.HumanReferenceBody;
             var reference = builder.Allocate(ref target.ReferencePose, source.ReferencePose.Length);
             for (var i = 0; i < reference.Length; i++) reference[i] = source.ReferencePose[i];
             var tracks = builder.Allocate(ref target.Tracks, source.Tracks.Length);
@@ -83,6 +87,8 @@ namespace AnimationSystemDOTS.Editor.Baking
             }
             var bodies = builder.Allocate(ref target.HumanBody, source.HumanBody.Length);
             for (var i = 0; i < bodies.Length; i++) bodies[i] = source.HumanBody[i];
+            var humanReference = builder.Allocate(ref target.HumanReferenceMuscles, source.HumanReferenceMuscles.Length);
+            for (var i = 0; i < humanReference.Length; i++) humanReference[i] = source.HumanReferenceMuscles[i];
         }
 
         static LibraryBakeResult Failure(string diagnostic) => new LibraryBakeResult { Diagnostics = new[] { diagnostic } };

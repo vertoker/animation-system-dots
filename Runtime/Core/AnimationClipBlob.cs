@@ -31,5 +31,8 @@ namespace AnimationSystemDOTS
         // from an already retargeted skeleton.
         public BlobArray<ScalarTrack> HumanMuscles;
         public BlobArray<BoneLocalPose> HumanBody;
+        public byte HasHumanAdditiveReference;
+        public BlobArray<float> HumanReferenceMuscles;
+        public BoneLocalPose HumanReferenceBody;
     }
 }

@@ -11,8 +11,9 @@ using UnityEngine.SceneManagement;
 
 namespace AnimationSystemDOTS.Editor.Baking
 {
-    // Native retargeting is confined to this isolated Editor-owned hierarchy.
-    // The runtime receives the same rig-local TRS schema as Generic animation.
+    // The isolated target supplies legacy local TRS, or authored muscle/body
+    // inputs for the precise runtime adapter. Source scene placement is not
+    // part of either pose representation; the entity owns that transform.
     internal sealed class HumanoidClipSampler : IEditorClipSampler
     {
         Scene scene;
@@ -36,8 +37,14 @@ namespace AnimationSystemDOTS.Editor.Baking
             try
             {
                 RootNormalizationIdentity = HumanoidRigValidator.Identity(source);
+                RootNormalizationIdentity += "|authoring-root-normalized-1";
                 instance = UnityEngine.Object.Instantiate(source, new InstantiateParameters { scene = scene });
                 instance.hideFlags = HideFlags.HideAndDontSave; instance.SetActive(true);
+                // GetHumanPose reports normalized world-space COM. Bake in the
+                // canonical root frame so authoring position/rotation/scale are
+                // not embedded a second time into the entity's local pose.
+                instance.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+                instance.transform.localScale = Vector3.one;
                 Clip = UnityEngine.Object.Instantiate(clip); Clip.name = clip.name; Clip.hideFlags = HideFlags.HideAndDontSave;
                 // Bake the endpoint of one cycle, not the wrapped first pose.
                 // Playback owns wrapping; retaining it here corrupts interpolation
@@ -85,8 +92,13 @@ namespace AnimationSystemDOTS.Editor.Baking
             if (muscles.Length != muscleCurves.Length) throw new ArgumentException("Invalid muscle output layout.");
             humanReader.GetHumanPose(ref humanRead);
             for (var m = 0; m < muscles.Length; m++)
+            {
                 muscles[m] = muscleCurves[m] != null ? muscleCurves[m].Evaluate((float)time) : 0;
-            return new BoneLocalPose { Position = humanRead.bodyPosition, Rotation = humanRead.bodyRotation, Scale = Unity.Mathematics.math.float3(1) };
+                if (!float.IsFinite(muscles[m])) throw new ArgumentException(Clip.name + ": non-finite evaluated Humanoid muscle " + m + " at " + time);
+            }
+            var body = new BoneLocalPose { Position = humanRead.bodyPosition, Rotation = humanRead.bodyRotation, Scale = Unity.Mathematics.math.float3(1) };
+            if (!PoseValidation.IsValid(body)) throw new ArgumentException(Clip.name + ": invalid normalized Humanoid body pose at " + time);
+            return body;
         }
 
         public BoneLocalPose[] Sample(double time)

@@ -5,8 +5,8 @@ namespace AnimationSystemDOTS
 {
     public static class AnimationBakeVersion
     {
-        public const int Schema = 2;
-        public const string Converter = "humanoid-muscles-2";
+        public const int Schema = 3;
+        public const string Converter = "humanoid-reference-3";
     }
 
     public struct RigDefinitionBlob
