@@ -84,12 +84,13 @@ Generated consumer projects and their `consumer-result.json` reports live in `.v
 
 ## Current functionality and remaining work
 
-Implemented and tested: Generic and target-Avatar Humanoid clip baking, explicit ECS playback and blending, affine skeleton poses, skinning, animated bounds, prefab lifecycle and 1000-character scenes. Ordinary Unity `.controller` assets now bake into a single-layer ECS/Burst state machine with typed parameters, transitions and crossfades. See [controller setup and supported subset](Documentation~/Controllers.md); the editable example is `Samples~/Sandbox/Scenes/02_Controller.unity`. The user confirmed depth/normal/tangent parity with a conventional SkinnedMeshRenderer.
+Implemented and tested: Generic and target-Avatar Humanoid clip baking, explicit ECS playback and blending, affine skeleton poses, skinning, animated bounds, prefab lifecycle and 1000-character scenes. Ordinary Unity `.controller` assets bake into ECS state machines with typed parameters, five Blend Tree modes, layers/masks, nested machines, crossfades and transition interruption. See [controller setup and supported subset](Documentation~/Controllers.md). The opt-in precise Humanoid mode blends authored muscles in Burst, then uses a managed unbound Avatar solver without per-character GameObjects or Animators. The user confirmed depth/normal/tangent parity with a conventional SkinnedMeshRenderer.
+
+The shared Mixamo comparison is in `Samples~/Sandbox/Scenes/05_AnimatorGO.unity`, `06_AnimatorECS.unity` and `07_AnimatorBots100.unity`. They use the same editable `Fixtures/Bots100.controller` and a shared motor/action profile. See [controls, manual checks and ragdoll assessment](Documentation~/AnimatorValidation.md). Input System is optional; on-screen actions and the deterministic trace work without its adapter.
 
 The original full feature plan still includes:
 
-- Animator layers, blend trees, nested machines and transition interruption beyond the supported single-layer subset.
-- Root-motion extraction and application; current crowd playback is stationary in XZ.
+- Root-motion extraction and application; sample locomotion currently uses an explicit shared motor.
 - Events, scalar animation curves, animated blend shapes and general bone attachments.
 - IK and procedural constraints.
 - Animation culling/LOD scheduling and additional measured optimizations.

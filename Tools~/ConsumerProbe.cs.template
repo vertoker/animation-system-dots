@@ -18,6 +18,8 @@ static class ConsumerProbe
     {
         public string mode, sampleRoot, error;
         public int characters, palettes, renderEntities, nativeAnimators;
+        public int ecsPlayerCharacters, ecsBotCharacters;
+        public bool animatorScenesAvailable, inputAdapterExcluded;
         public bool samplesInitiallyExcluded, sampleImported, sourcePathsWritable, passed;
     }
     static Report report;
@@ -57,6 +59,8 @@ static class ConsumerProbe
                 if (type == null) return;
                 if ((string)type.GetField("ScenePath").GetValue(null) != report.sampleRoot + "Scenes/04_HumanoidCrowd1000.unity") throw new Exception("Sample tools resolved the wrong import path.");
                 report.sampleImported = true;
+                report.animatorScenesAvailable = new[] { "05_AnimatorGO", "06_AnimatorECS", "07_AnimatorBots100" }.All(name => AssetDatabase.LoadAssetAtPath<SceneAsset>(report.sampleRoot + "Scenes/" + name + ".unity") != null);
+                report.inputAdapterExcluded = !UnityEditor.Compilation.CompilationPipeline.GetAssemblies(UnityEditor.Compilation.AssembliesType.Editor).Any(a => a.name == "AnimationSystemDOTS.Sandbox.Input");
                 report.sourcePathsWritable = report.sampleRoot.StartsWith("Assets/") && AssetImporter.GetAtPath(report.sampleRoot + "Humanoid/Model/BaldMale.fbx") != null;
                 EditorSceneManager.OpenScene(report.sampleRoot + "Scenes/04_HumanoidCrowd1000.unity");
                 SessionState.SetString(Key + "Report", JsonUtility.ToJson(report));
@@ -82,6 +86,36 @@ static class ConsumerProbe
             if (step == 3 && !EditorApplication.isPlaying)
             {
                 if (++settledFrames < 12) return;
+                settledFrames = 0; EditorSceneManager.OpenScene(report.sampleRoot + "Scenes/06_AnimatorECS.unity");
+                SessionState.SetInt(Key + "Step", 4); EditorApplication.isPlaying = true; return;
+            }
+            if ((step == 4 || step == 6) && EditorApplication.isPlaying)
+            {
+                var world = World.DefaultGameObjectInjectionWorld; if (world == null || !world.IsCreated) return;
+                var memberType = Type.GetType("AnimationSystemDOTS.Sandbox.CharacterMember, AnimationSystemDOTS.Sandbox");
+                if (memberType == null) throw new Exception("Imported ECS character assembly missing.");
+                var em = world.EntityManager; int count;
+                using (var actors = em.CreateEntityQuery(ComponentType.ReadOnly(memberType))) count = actors.CalculateEntityCount();
+                if (count != (step == 4 ? 1 : 100)) return;
+                using (var paletteQuery = em.CreateEntityQuery(typeof(SkinMatrixPublication)))
+                using (var values = paletteQuery.ToComponentDataArray<SkinMatrixPublication>(Allocator.Temp))
+                {
+                    if (values.Length != count * 3 || values.Any(v => v.Result != SkinMatrixPublicationResult.Success)) return;
+                }
+                if (UnityEngine.Object.FindObjectsByType<Animator>().Length != 0) throw new Exception("ECS validation spawned native Animators.");
+                if (step == 4) report.ecsPlayerCharacters = count; else report.ecsBotCharacters = count;
+                SessionState.SetString(Key + "Report", JsonUtility.ToJson(report)); SessionState.SetInt(Key + "Step", step + 1); EditorApplication.isPlaying = false; return;
+            }
+            if (step == 5 && !EditorApplication.isPlaying)
+            {
+                if (++settledFrames < 12) return;
+                settledFrames = 0; EditorSceneManager.OpenScene(report.sampleRoot + "Scenes/07_AnimatorBots100.unity");
+                SessionState.SetInt(Key + "Step", 6); EditorApplication.isPlaying = true; return;
+            }
+            if (step == 7 && !EditorApplication.isPlaying)
+            {
+                if (++settledFrames < 12) return;
+                report.passed &= report.animatorScenesAvailable && report.inputAdapterExcluded && report.ecsPlayerCharacters == 1 && report.ecsBotCharacters == 100;
                 File.WriteAllText("consumer-result.json", JsonUtility.ToJson(report, true));
                 EditorApplication.update -= Update; EditorApplication.Exit(report.passed ? 0 : 4);
             }

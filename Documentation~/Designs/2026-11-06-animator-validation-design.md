@@ -1,6 +1,6 @@
 # Три сцены проверки Animator: GO, ECS и 100 ботов
 
-Статус: утверждён пользователем 2026-11-06; реализация начата. После измеренного расхождения TRS blending пользователь выбрал сначала точный Humanoid, затем ECS-сцены. Нативный probe с исходными muscle curves и unbound HumanPoseHandler дал ошибку менее 0.2 mm / 0° на проверенных смесях; это Editor-эксперимент, ещё не Burst runtime и не полная проверка графа.
+Статус: реализовано и проверено 2026-11-07. Три сцены используют один controller с 34 клипами, 21 состоянием и 3 слоями; полная 60-секундная native/ECS трасса посещает все состояния, максимум 7.611 мм / 0°. Sampling/blending работают в Burst; финальный точный Humanoid retarget использует согласованный managed unbound HumanPoseHandler без GameObject/Animator/PlayableGraph на персонажа. Пройдены 263 Editor/Sandbox и 54 Runtime теста, clean UPM/Assets consumers без Input System и D3D12 Player-проверки. 100 ботов: median 3.28 мс / P95 5.91 мс при 1280×720 на RTX 4060 Ti. Детали и границы: [AnimatorValidation.md](../AnimatorValidation.md).
 
 ## Цель и согласованные исходные решения
 

@@ -112,13 +112,14 @@ Interfaces: ECS entities use the same graph/model/motor math, per-instance param
 
 Files: update `Documentation~/SupportMatrix.md`, manual test document, README/sample docs, approved design status and this checklist.
 
-- [ ] Run complete Editor/Sandbox and Runtime suites, old 02/04 regression, SubScene reload/rebake/despawn and Domain Reload disabled. Save result XML/pose error reports.
-- [ ] Verify clean UPM sample consumer and Assets/submodule consumer, including core/autonomous sample without Input System and informative adapter absence behavior.
-- [ ] Capture visible standalone Player benchmark/screenshots for the new scenes; distinguish measurements from untested configurations.
-- [ ] Document exact controls, three scene paths, imported motions, supported graph features/limits, manual comparison steps and ragdoll feasibility. Never mark stage 5 complete while mandatory features fail.
-- [ ] Obtain fresh whole-change review, fix material findings with regression tests, rerun affected checks, commit on master. No push.
+- [x] Run complete Editor/Sandbox and Runtime suites, old 02/04 regression, SubScene reload/rebake/despawn and Domain Reload disabled. Save result XML/pose error reports.
+- [x] Verify clean UPM sample consumer and Assets/submodule consumer, including core/autonomous sample without Input System and informative adapter absence behavior.
+- [x] Capture visible standalone Player benchmark/screenshots for the new scenes; distinguish measurements from untested configurations.
+- [x] Document exact controls, three scene paths, imported motions, supported graph features/limits, manual comparison steps and ragdoll feasibility. Never mark stage 5 complete while mandatory features fail.
+- [x] Obtain fresh whole-change review, fix material findings with regression tests, rerun affected checks, commit on master. No push.
 
 ## Execution notes
 
 - 2026-11-06: user approved design and requested immediate implementation. Inline execution chosen to keep dependent runtime representation and oracle work together; no extra approval gate.
 - Initial workspace contains untracked root `ProjectSettings/` created by opening the package root as a Unity project. Preserve it; use the existing canonical `DevProject~` host for verification.
+- 2026-11-07: all tasks accepted. Full-suite XML, 60-second pose trace, clean-consumer JSON and 10-second Player reports are retained in `DevProject~/Artifacts/Verification/AnimatorValidation`. One fresh whole-change review found no Critical/Important issues; a minor trailing-separator importer path constraint is documented. Original roadmap stages beyond this approved Animator milestone remain open.
