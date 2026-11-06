@@ -1,6 +1,6 @@
 ﻿param(
     [string]$SourcePath = 'Sources~/Rukhanka Animation System 2 _ Animation Tools _ Unity Asset Store.html',
-    [string]$OutputPath = 'Documentation~/ReferenceInventory.md'
+    [string]$OutputPath = 'Assets/AnimationSystemDOTS/Documentation~/ReferenceInventory.md'
 )
 $ErrorActionPreference = 'Stop'
 $html = Get-Content -Raw -Encoding utf8 -LiteralPath $SourcePath

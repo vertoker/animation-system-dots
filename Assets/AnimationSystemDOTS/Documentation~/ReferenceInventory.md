@@ -1,8 +1,8 @@
 ﻿# Reference inventory
 
-Captured from the saved HTML on 2026-11-05. This is a partial file-name tree, not source code.
+Captured from the saved HTML on 2026-11-07. This is a partial file-name tree, not source code.
 
-Source: `Sources/Rukhanka Animation System 2 _ Animation Tools _ Unity Asset Store.html`
+Source: `Sources~/Rukhanka Animation System 2 _ Animation Tools _ Unity Asset Store.html`
 SHA-256: `666F8F6733DE7BF06BBEA3C8FA2CAB4A311AEE57287CF3B43D4C47D76242274B`
 
 Visible files: **349 / 878 declared**. Hidden/collapsed files are unknown. An AGENTS.md name is not readable instruction content.

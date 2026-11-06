@@ -60,7 +60,7 @@ for name, reference, normal, target in [
     graph['m_Nodes'].extend([{'m_Id': node['m_ObjectId']}, {'m_Id': sampler['m_ObjectId']}])
     graph['m_Edges'].extend([edge(node['m_ObjectId'], 0, sampler['m_ObjectId'], 1), edge(sampler['m_ObjectId'], 0, target, 0)])
 
-output = Path('Samples~/Sandbox/Humanoid/Materials'); output.mkdir(parents=True, exist_ok=True)
+output = Path('Assets/AnimationSystemDOTS.Sandbox/Humanoid/Materials'); output.mkdir(parents=True, exist_ok=True)
 (output / 'HumanoidComputeDeformation.shadergraph').write_text('\n\n'.join(json.dumps(o, indent=4) for o in objects) + '\n', encoding='utf-8')
 shutil.copy2(base / 'UnitySamplesLicense.txt', output / 'UnitySamplesLicense.txt')
 print('Generated textured graph with native Compute Deformation position/normal/tangent wiring.')

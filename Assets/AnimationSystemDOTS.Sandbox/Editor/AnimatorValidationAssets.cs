@@ -24,9 +24,9 @@ namespace AnimationSystemDOTS.Sandbox.Editor
         [MenuItem("Tools/Animation System DOTS/Import Animator Validation Mixamo Sources")]
         public static void ImportSources()
         {
-            var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(AnimationRig).Assembly);
-            if (package == null) throw new InvalidOperationException("Cannot locate editable Animation System DOTS package.");
-            var sourceRoot = Path.Combine(package.resolvedPath, "Sources~/Mixamo_Bots100");
+            // Private source files belong to the host project, outside the
+            // installable package, in both Assets and UPM installations.
+            var sourceRoot = Path.GetFullPath(Path.Combine(Application.dataPath, "../Sources~/Mixamo_Bots100"));
             ImportFrom(sourceRoot);
         }
 

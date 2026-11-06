@@ -35,6 +35,13 @@ def validate(root=ROOT):
     for path in [root / "Assets", *root.glob("Assets/*")]:
         if path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction()):
             errors.append("Root development assets must be ordinary folders: " + str(path))
+    for path in (root / "Tools").glob("*"):
+        if path.suffix not in (".py", ".ps1") or path.name == "ValidateLayout.py":
+            continue
+        text = path.read_text(encoding="utf-8")
+        for obsolete in ("Path('Samples~/", "'Documentation~/", "'DevProject~'"):
+            if obsolete in text:
+                errors.append("Obsolete root path in tool: " + str(path.relative_to(root)) + ": " + obsolete)
     guids = {}
     for folder, directories, names in os.walk(root / "Assets"):
         directories[:] = [name for name in directories if not name.endswith("~") and not name.startswith(".")]

@@ -35,6 +35,8 @@ python Tools/ValidateLayout.py
 python -m unittest discover -s Tools/tests -v
 ```
 
+Private Mixamo sources for the optional reimport menu belong in the host project's `Sources~/Mixamo_Bots100`, outside the installable package. Imported FBX fixtures are already included in the sandbox; consumers do not need those private source files. Scripts can use `AnimatorValidationAssets.ImportFrom` for a different source directory.
+
 Open `Assets/AnimationSystemDOTS.Sandbox/Scenes/05_AnimatorGO.unity`, `06_AnimatorECS.unity` or `07_AnimatorBots100.unity` for the shared 34-clip Animator comparison. Scene `04_HumanoidCrowd1000.unity` is the 1000-character test. See [controls and manual checks](Assets/AnimationSystemDOTS/Documentation~/AnimatorValidation.md).
 
 ## Install the package
