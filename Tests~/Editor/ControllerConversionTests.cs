@@ -89,9 +89,9 @@ namespace AnimationSystemDOTS.Tests
             finally { result.Controller.Dispose(); }
         }
         [TestCase("writeDefaults")]
-        [TestCase("blendTree")]
+        [TestCase("emptyTree")]
         [TestCase("nested")]
-        [TestCase("layers")]
+        [TestCase("emptyLayer")]
         [TestCase("behaviour")]
         [TestCase("interruption")]
         [TestCase("missingParameter")]
@@ -104,9 +104,9 @@ namespace AnimationSystemDOTS.Tests
             switch (feature)
             {
                 case "writeDefaults": first.writeDefaultValues = true; break;
-                case "blendTree": first.motion = new BlendTree(); break;
+                case "emptyTree": first.motion = new BlendTree(); break;
                 case "nested": machine.AddStateMachine("Nested"); break;
-                case "layers": source.AddLayer("Extra"); break;
+                case "emptyLayer": source.AddLayer("Extra"); break;
                 case "behaviour":
                     var behaviour = ScriptableObject.CreateInstance<ControllerTestBehaviour>();
                     AssetDatabase.AddObjectToAsset(behaviour, source);
@@ -123,7 +123,7 @@ namespace AnimationSystemDOTS.Tests
                 Assert.That(result.Success, Is.False);
                 Assert.That(result.Controller.IsCreated, Is.False);
                 var text = string.Join("\n", result.Diagnostics);
-                Assert.That(text, Does.Contain("Test.controller")); Assert.That(text, Does.Contain("Base Layer"));
+                Assert.That(text, Does.Contain("Test.controller")); Assert.That(text, Does.Contain(feature == "emptyLayer" ? "/Extra" : "Base Layer"));
             }
             finally { if (result.Controller.IsCreated) result.Controller.Dispose(); }
         }

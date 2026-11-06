@@ -15,5 +15,10 @@ namespace AnimationSystemDOTS
         public ClipLoopBoundary LoopBoundary;
         public BlobAssetReference<BoneMaskBlob> Mask;
         public ulong InstanceSequence;
+        // A controller owns embedded mask data for the whole request lifetime.
+        // Standalone scripted requests continue using Mask directly.
+        public BlobAssetReference<AnimatorControllerBlob> MaskController;
+        public int ControllerMask;
+        public float LayerWeight;
     }
 }

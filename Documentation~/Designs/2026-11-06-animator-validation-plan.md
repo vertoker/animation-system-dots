@@ -71,10 +71,10 @@ Files: extend graph blob and baking, `Runtime/Controller/ControllerAdvanceSystem
 
 Interfaces: dynamic per-entity layer states/weights, rig-bound mask definitions and source additive reference poses; exclusive controller request writer, immutable shared graph. Base layer remains compatible with existing queries or documented explicit layer overloads.
 
-- [ ] Add native tests for override/additive order, partial masks, Humanoid body parts and transform masks, zero/intermediate weights, authored additive reference different from rest, multiple quaternion blends and synced layer timing.
-- [ ] Implement from failing tests; invalidate bake caches for mask, reference and motion dependencies. Validate finite layer weights and rig compatibility.
-- [ ] Add rebake/same-count parameter layout and repeated tick/replay regression tests, plus real Humanoid fixtures from task 2.
-- [ ] Verify runtime tests and old samples, then commit.
+- [x] Add native tests for override/additive order, partial masks, Humanoid body parts and transform masks, zero/intermediate weights, authored additive reference different from rest, multiple quaternion blends and synced layer timing.
+- [x] Implement from failing tests; invalidate bake caches for mask, reference and motion dependencies. Validate finite layer weights and rig compatibility.
+- [x] Add rebake/same-count parameter layout and repeated tick/replay regression tests, plus real Humanoid fixtures from task 2.
+- [x] Verify runtime tests and old samples, then commit.
 
 ## Task 5 — hierarchical machines and transition interruption
 

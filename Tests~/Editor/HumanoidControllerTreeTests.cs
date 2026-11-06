@@ -23,7 +23,14 @@ namespace AnimationSystemDOTS.Tests
     {
         [TestCase(false)]
         [TestCase(true)]
-        public void RealHumanoidController_TreePartialAndZeroWeightsMatchNative(bool direct)
+        [TestCase(false, 1)]
+        [TestCase(false, 2)]
+        [TestCase(false, 3)]
+        [TestCase(false, 4)]
+        [TestCase(false, 5)]
+        [TestCase(false, 6)]
+        [TestCase(false, 7)]
+        public void RealHumanoidController_TreePartialAndZeroWeightsMatchNative(bool direct, int layerMode = 0)
         {
             var folder = "Assets/__HumanControllerTree_" + Guid.NewGuid().ToString("N");
             AssetDatabase.CreateFolder("Assets", Path.GetFileName(folder));
@@ -44,6 +51,20 @@ namespace AnimationSystemDOTS.Tests
                     AssetDatabase.FindAssets("t:Model", new[] { root + "Mixamo" }).Select(AssetDatabase.GUIDToAssetPath)
                         .Where(p => Path.GetFileName(p).StartsWith(prefix, StringComparison.Ordinal)).OrderBy(p => p.Length).ThenBy(p => p)
                         .SelectMany(AssetDatabase.LoadAllAssetsAtPath).OfType<AnimationClip>().First(c => !c.name.StartsWith("__preview"))).ToArray();
+                if (layerMode == 6 || layerMode == 7)
+                {
+                    var original = clips[0]; clips[0] = Object.Instantiate(original); clips[0].name = "Run additive reference Run0";
+                    var reference = AnimationUtility.GetAnimationClipSettings(clips[0]); reference.hasAdditiveReferencePose = true;
+                    reference.additiveReferencePoseClip = original; reference.additiveReferencePoseTime = 0;
+                    AnimationUtility.SetAnimationClipSettings(clips[0], reference); AssetDatabase.CreateAsset(clips[0], folder + "/Run.anim");
+                }
+                if (layerMode == 2 || layerMode == 3 || layerMode == 6 || layerMode == 7)
+                {
+                    clips[1] = Object.Instantiate(clips[1]); clips[1].name = "Wave additive reference Run0";
+                    var reference = AnimationUtility.GetAnimationClipSettings(clips[1]); reference.hasAdditiveReferencePose = true;
+                    reference.additiveReferencePoseClip = clips[0]; reference.additiveReferencePoseTime = 0;
+                    AnimationUtility.SetAnimationClipSettings(clips[1], reference); AssetDatabase.CreateAsset(clips[1], folder + "/Wave.anim");
+                }
                 foreach (var clip in clips)
                 {
                     var result = ClipBakePipeline.Bake(new ClipBakeRequest { Source = source, Clip = clip, Rig = rig, Settings = settings });
@@ -57,14 +78,52 @@ namespace AnimationSystemDOTS.Tests
                 tree.children = new[] { new ChildMotion { motion = clips[0], timeScale = 1, directBlendParameter = "A" },
                     new ChildMotion { motion = clips[1], threshold = 1, timeScale = 1, directBlendParameter = "B" } };
                 var serialized = new SerializedObject(tree); serialized.FindProperty("m_NormalizedBlendValues").boolValue = true; serialized.ApplyModifiedPropertiesWithoutUndo();
-                var state = controller.layers[0].stateMachine.AddState("Human"); state.motion = tree; state.writeDefaultValues = false;
+                var state = controller.layers[0].stateMachine.AddState("Human"); state.motion = layerMode > 0 ? (Motion)clips[0] : tree; state.writeDefaultValues = false;
                 controller.layers[0].stateMachine.defaultState = state;
-                var converted = ControllerBakePipeline.Build(controller, clips, library);
+                if (layerMode > 0)
+                {
+                    controller.AddLayer("Upper"); var layers = controller.layers; var upper = layers[1]; upper.defaultWeight = .35f;
+                    upper.blendingMode = layerMode == 2 || layerMode == 3 || layerMode == 6 || layerMode == 7 ? AnimatorLayerBlendingMode.Additive : AnimatorLayerBlendingMode.Override;
+                    var upperState = upper.stateMachine.AddState("Wave"); upperState.writeDefaultValues = false;
+                    if (layerMode == 5 || layerMode == 6 || layerMode == 7)
+                    {
+                        tree.blendType = BlendTreeType.Direct; upperState.motion = tree;
+                    }
+                    else upperState.motion = clips[1];
+                    upper.stateMachine.defaultState = upperState;
+                    if (layerMode != 3 && layerMode != 7)
+                    {
+                        var mask = new AvatarMask();
+                        for (var part = 0; part < (int)AvatarMaskBodyPart.LastBodyPart; part++) mask.SetHumanoidBodyPartActive((AvatarMaskBodyPart)part, false);
+                        foreach (var part in new[] { AvatarMaskBodyPart.Body, AvatarMaskBodyPart.Head, AvatarMaskBodyPart.LeftArm,
+                            AvatarMaskBodyPart.RightArm, AvatarMaskBodyPart.LeftFingers, AvatarMaskBodyPart.RightFingers }) mask.SetHumanoidBodyPartActive(part, true);
+                        AssetDatabase.CreateAsset(mask, folder + "/Upper.mask"); upper.avatarMask = mask;
+                    }
+                    layers[1] = upper; controller.layers = layers;
+                    if (layerMode == 4)
+                    {
+                        controller.AddLayer("Root and Body"); layers = controller.layers; layers[2].defaultWeight = .4f;
+                        var rootState = layers[2].stateMachine.AddState("Root"); rootState.motion = clips[1]; rootState.writeDefaultValues = false; layers[2].stateMachine.defaultState = rootState;
+                        var mask = new AvatarMask();
+                        for (var part = 0; part < (int)AvatarMaskBodyPart.LastBodyPart; part++) mask.SetHumanoidBodyPartActive((AvatarMaskBodyPart)part, false);
+                        mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Root, true); mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Body, true);
+                        AssetDatabase.CreateAsset(mask, folder + "/Root.mask"); layers[2].avatarMask = mask; controller.layers = layers;
+                    }
+                }
+                var converted = ControllerBakePipeline.Build(controller, clips, library, source, rig);
+                if (layerMode == 7)
+                {
+                    Assert.That(converted.Success, Is.False);
+                    Assert.That(string.Join("\n", converted.Diagnostics), Does.Contain(folder).And.Contain("/Upper").And.Contain("root motion"));
+                    if (converted.Controller.IsCreated) converted.Controller.Dispose();
+                    return;
+                }
                 Assert.That(converted.Success, Is.True, string.Join("\n", converted.Diagnostics)); controllerBlob = converted.Controller;
                 var animator = source.GetComponent<Animator>(); animator.applyRootMotion = false; animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
                 native = PlayableGraph.Create("AnimationSystemDOTS Human Controller Oracle"); native.SetTimeUpdateMode(DirectorUpdateMode.Manual);
                 var playable = AnimatorControllerPlayable.Create(native, controller);
                 AnimationPlayableOutput.Create(native, "Native", animator).SetSourcePlayable(playable); native.Play();
+                for (var l = 1; l < controller.layers.Length; l++) playable.SetLayerWeight(l, controller.layers[l].defaultWeight);
                 var transforms = Enumerable.Range(0, rig.Value.Paths.Length).Select(i => i == 0 ? source.transform : source.transform.Find(rig.Value.Paths[i].ToString())).ToArray();
                 world = new World("AnimationSystemDOTS Human Controller Tree"); var em = world.EntityManager;
                 var step = em.CreateEntity(typeof(AnimationStepContext));
@@ -97,7 +156,9 @@ namespace AnimationSystemDOTS.Tests
                         maxRotation = math.max(maxRotation, Quaternion.Angle(local[b].Rotation, transforms[b].localRotation));
                     }
                 }
-                Debug.Log("Human controller " + (direct ? "Direct" : "1D") + " max=" + maxPosition + "m/" + maxRotation + "deg " + worst);
+                var report = "Human controller " + (direct ? "Direct" : "1D") + " layerMode=" + layerMode + " max=" + maxPosition + "m/" + maxRotation + "deg " + worst;
+                Directory.CreateDirectory("Artifacts/Verification/AnimatorValidation");
+                File.WriteAllText("Artifacts/Verification/AnimatorValidation/HumanController-" + direct + "-" + layerMode + ".txt", report); Debug.Log(report);
                 Assert.That(maxPosition, Is.LessThanOrEqualTo(.02f), worst);
                 Assert.That(maxRotation, Is.LessThanOrEqualTo(2));
             }

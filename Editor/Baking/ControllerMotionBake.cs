@@ -22,7 +22,7 @@ namespace AnimationSystemDOTS.Editor.Baking
         internal ControllerMotionBake(IReadOnlyList<AnimationClip> clips, Dictionary<string, int> parameters, AnimationParameterDefinition[] definitions)
         { this.clips = clips; this.parameters = parameters; this.definitions = definitions; }
 
-        internal int Add(Motion motion, string path)
+        internal int Add(Motion motion, string path, bool additiveReference = false, bool additiveRoot = false)
         {
             Require(motion != null, path, "Empty motions are unsupported.");
             Require(active.Add(motion), path, "Cyclic Blend Tree reference.");
@@ -30,6 +30,10 @@ namespace AnimationSystemDOTS.Editor.Baking
             {
                 if (motion is AnimationClip clip)
                 {
+                    Require(!additiveReference || AnimationUtility.GetAnimationClipSettings(clip).hasAdditiveReferencePose, path,
+                        "Additive layer clips require an explicit Additive Reference Pose.");
+                    Require(!additiveRoot || !clip.isHumanMotion || math.lengthsq((float3)clip.averageSpeed) <= 1e-6f && math.abs(clip.averageAngularSpeed) <= 1e-3f, path,
+                        "Moving Humanoid additive clips with Root enabled require root motion support. Use an in-place source or disable Root in this layer's Avatar Mask.");
                     var bindings = new HashSet<string>(StringComparer.Ordinal);
                     foreach (var binding in AnimationUtility.GetCurveBindings(clip))
                         bindings.Add(binding.type.FullName + "\n" + binding.propertyName + "\n" + binding.path);
@@ -75,7 +79,7 @@ namespace AnimationSystemDOTS.Editor.Baking
                     Require(!child.mirror, childPath, "Mirrored Blend Tree children are unsupported.");
                     Require(math.isfinite(child.threshold) && math.all(math.isfinite((float2)child.position)) && math.isfinite(child.timeScale)
                         && child.timeScale != 0 && math.isfinite(child.cycleOffset), childPath, "Child threshold/position/time scale/cycle offset must be finite; zero child time scale is unsupported.");
-                    children[i] = new ControllerMotionChild { Motion = Add(child.motion, childPath), DirectParameter = node.Type == ControllerMotionType.Direct ? FloatParameter(child.directBlendParameter, childPath) : -1,
+                    children[i] = new ControllerMotionChild { Motion = Add(child.motion, childPath, additiveReference, additiveRoot), DirectParameter = node.Type == ControllerMotionType.Direct ? FloatParameter(child.directBlendParameter, childPath) : -1,
                         Position = child.position, Threshold = child.threshold, TimeScale = child.timeScale, CycleOffset = child.cycleOffset };
                     for (var j = 0; j < i; j++)
                     {

@@ -5,7 +5,7 @@ namespace AnimationSystemDOTS
 {
     public struct AnimatorControllerBlob
     {
-        public const int CurrentVersion = 2;
+        public const int CurrentVersion = 3;
         public int Version;
         public FixedString128Bytes LibraryKey;
         public int DefaultState;
@@ -18,6 +18,18 @@ namespace AnimationSystemDOTS
         // a node so repeated clips retain independent child timing.
         public BlobArray<ControllerMotionDefinition> Motions;
         public BlobArray<ControllerMotionChild> MotionChildren;
+        public BlobArray<ControllerLayerDefinition> Layers;
+        public BlobArray<BoneMaskBlob> Masks;
+    }
+    public struct ControllerLayerDefinition
+    {
+        public FixedString128Bytes Name;
+        public int StateStart, StateCount, DefaultState;
+        public int AnyStart, AnyCount, EntryStart, EntryCount;
+        public int SyncedLayer, Mask;
+        public float DefaultWeight;
+        public PoseBlendMode BlendMode;
+        public byte SyncedTiming;
     }
 
     public struct AnimationController : IComponentData

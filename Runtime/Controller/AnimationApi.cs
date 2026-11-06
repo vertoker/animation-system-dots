@@ -6,6 +6,21 @@ namespace AnimationSystemDOTS
 {
     public static class AnimationApi
     {
+        public static int FindLayer(in AnimationController controller, in FixedString128Bytes name)
+        {
+            if (controller.Definition.IsCreated)
+                for (var i = 0; i < controller.Definition.Value.Layers.Length; i++)
+                    if (controller.Definition.Value.Layers[i].Name == name) return i;
+            return -1;
+        }
+        public static AnimationLayerResult SetLayerWeight(in AnimationController controller, DynamicBuffer<ControllerLayerRuntime> layers, int layer, float weight)
+        {
+            if (!controller.Definition.IsCreated || controller.Definition.Value.Version != AnimatorControllerBlob.CurrentVersion
+                || layers.Length != math.max(controller.Definition.Value.Layers.Length, 1)) return AnimationLayerResult.InvalidLayout;
+            if ((uint)layer >= (uint)layers.Length) return AnimationLayerResult.InvalidLayer;
+            if (!math.isfinite(weight) || weight < 0 || weight > 1) return AnimationLayerResult.InvalidWeight;
+            var value = layers[layer]; value.Weight = layer == 0 ? 1 : weight; layers[layer] = value; return AnimationLayerResult.Success;
+        }
         // Resolve names once at setup, retain local IDs in gameplay components/jobs.
         public static AnimationParameterId FindParameter(in AnimationController controller, in FixedString128Bytes name)
         {

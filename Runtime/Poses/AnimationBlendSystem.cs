@@ -21,7 +21,8 @@ namespace AnimationSystemDOTS
             void Execute(Entity entity, in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests,
                 in DynamicBuffer<SampledBonePose> samples, DynamicBuffer<BoneLocalPose> local)
             {
-                if (Controllers.HasComponent(entity) && Playback.HasComponent(entity) && Playback[entity].Value == PlaybackDriver.Controller
+                var nativeController = Controllers.HasComponent(entity) && Playback.HasComponent(entity) && Playback[entity].Value == PlaybackDriver.Controller;
+                if (nativeController
                     && Controllers[entity].Result == ControllerEvaluationResult.Success && Controllers[entity].RetainPose != 0 && local.Length > 0) return;
                 if (!rig.Rig.IsCreated) { local.Clear(); return; }
                 var count = rig.Rig.Value.RestLocalPoses.Length;
@@ -40,6 +41,8 @@ namespace AnimationSystemDOTS
                             { layer = requests[i].Layer; found = true; }
                         if (!found) break;
                         first = false; previousLayer = layer;
+                        if (nativeController)
+                        { BlendControllerLayer(ref result, rig, requests, samples, layer, bone, count); continue; }
                         var average = BoneLocalPose.Identity; double total = 0;
                         for (var i = 0; i < requests.Length; i++)
                         {
@@ -63,11 +66,59 @@ namespace AnimationSystemDOTS
                     local[bone] = result;
                 }
             }
+            static void BlendControllerLayer(ref BoneLocalPose result, in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests,
+                in DynamicBuffer<SampledBonePose> samples, int layer, int bone, int count)
+            {
+                var position = float3.zero; var scale = float3.zero; var rotation = float4.zero;
+                var reference = quaternion.identity; var total = 0f; var influence = 0f; var mode = PoseBlendMode.Override;
+                for (var i = 0; i < requests.Length; i++)
+                {
+                    var request = requests[i]; var sample = samples[i * count + bone];
+                    if (request.Layer != layer || sample.IsValid == 0) continue;
+                    var weight = Weight(request, rig, bone, count); if (weight <= 0) continue;
+                    var layerRequest = request; layerRequest.Weight = request.LayerWeight;
+                    influence = math.max(influence, Weight(layerRequest, rig, bone, count));
+                    var p = sample.Pose.Position; var q = sample.Pose.Rotation; var s = sample.Pose.Scale;
+                    mode = request.BlendMode;
+                    if (mode == PoseBlendMode.Additive)
+                    {
+                        ref var additive = ref rig.Library.Value.Clips[request.Clip.Value].ReferencePose[bone];
+                        p -= additive.Position; s -= additive.Scale; q = math.mul(math.inverse(additive.Rotation), q);
+                    }
+                    if (total == 0) reference = q;
+                    position += p * weight; scale += s * weight;
+                    rotation += q.value * (math.dot(reference.value, q.value) < 0 ? -weight : weight); total += weight;
+                }
+                if (total <= 0 || influence <= 0) return;
+                influence = math.saturate(influence); var missing = math.max(0, influence - total);
+                if (mode == PoseBlendMode.Additive)
+                {
+                    var delta = math.normalizesafe(new quaternion(rotation), quaternion.identity);
+                    // Unity blends a layer's deltas first, then scales the imaginary
+                    // quaternion part while retaining its scalar part. Scale deltas
+                    // add across layers rather than multiplying the current scale.
+                    var weighted = math.normalizesafe(new quaternion(new float4(delta.value.xyz * influence, delta.value.w)), quaternion.identity);
+                    result.Position += position; result.Scale += scale;
+                    result.Rotation = math.normalize(math.mul(result.Rotation, weighted));
+                }
+                else
+                {
+                    var rest = rig.Rig.Value.RestLocalPoses[bone];
+                    rotation += rest.Rotation.value * (math.dot(reference.value, rest.Rotation.value) < 0 ? -missing : missing);
+                    var pose = new BoneLocalPose { Position = (position + rest.Position * missing) / influence,
+                        Scale = (scale + rest.Scale * missing) / influence,
+                        Rotation = math.normalizesafe(new quaternion(rotation), rest.Rotation) };
+                    result.Position = math.lerp(result.Position, pose.Position, influence);
+                    result.Scale = math.lerp(result.Scale, pose.Scale, influence);
+                    result.Rotation = math.nlerp(result.Rotation, pose.Rotation, influence);
+                }
+            }
             static float Weight(in AnimationClipRequest request, in AnimationRig rig, int bone, int count)
             {
                 if (!math.isfinite(request.Weight) || request.Weight <= 0) return 0;
-                if (!request.Mask.IsCreated) return request.Weight;
-                ref var mask = ref request.Mask.Value;
+                if (!AnimationRequestMask.HasMask(request)) return request.Weight;
+                if (!AnimationRequestMask.CanRead(request)) return 0;
+                ref var mask = ref AnimationRequestMask.Get(request);
                 if (mask.Version != AnimationBakeVersion.Schema || mask.RigKey != rig.Rig.Value.ContentKey || mask.Weights.Length != count) return 0;
                 var value = mask.Weights[bone];
                 return math.isfinite(value) ? request.Weight * math.saturate(value) : 0;

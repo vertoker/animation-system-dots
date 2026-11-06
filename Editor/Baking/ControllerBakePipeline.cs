@@ -18,10 +18,11 @@ namespace AnimationSystemDOTS.Editor.Baking
     public static class ControllerBakePipeline
     {
         public static ControllerBakeResult Build(RuntimeAnimatorController source, IReadOnlyList<AnimationClip> clips,
-            BlobAssetReference<AnimationLibraryBlob> library)
+            BlobAssetReference<AnimationLibraryBlob> library, GameObject target = null, BlobAssetReference<RigDefinitionBlob> rig = default)
         {
             var path = source != null ? AssetDatabase.GetAssetPath(source) : "<null controller>";
             if (string.IsNullOrEmpty(path)) path = source.name;
+            var compiledMasks = new ControllerMaskBake();
             try
             {
                 var controller = source as AnimatorController;
@@ -29,72 +30,96 @@ namespace AnimationSystemDOTS.Editor.Baking
                 Require(library.IsCreated && library.Value.Version == AnimationBakeVersion.Schema, path, "A current animation library is required.");
                 Require(clips != null && clips.Count == library.Value.Clips.Length, path, "Clip mapping does not match the library.");
                 var layers = controller.layers;
-                Require(layers.Length == 1, path + "/Base Layer", "Exactly one layer is supported.");
-                var layer = layers[0]; path += "/" + layer.name;
-                Require(layer.avatarMask == null && layer.syncedLayerIndex < 0 && !layer.iKPass
-                    && layer.blendingMode == AnimatorLayerBlendingMode.Override, path, "Masks, synced/additive layers and IK pass are unsupported.");
-                var machine = layer.stateMachine;
-                Require(machine != null, path, "Missing state machine.");
-                Require(machine.stateMachines.Length == 0, path, "Nested state machines are unsupported.");
-                Require(machine.behaviours.Length == 0, path, "StateMachineBehaviour callbacks are unsupported.");
-                var children = machine.states;
-                Require(children.Length > 0, path, "At least one clip state is required.");
-                var states = new ControllerStateDefinition[children.Length];
-                var stateIds = new Dictionary<AnimatorState, int>();
-                for (var i = 0; i < children.Length; i++) stateIds.Add(children[i].state, i);
-                Require(machine.defaultState != null && stateIds.ContainsKey(machine.defaultState), path, "Default state is outside the root state machine.");
+                Require(layers.Length > 0, path, "At least one layer is required.");
+                Require(!rig.IsCreated || rig.Value.ContentKey == library.Value.RigKey, path, "Mask target rig differs from the animation library.");
+                var assetPath = path;
                 var definitions = Parameters(controller, path, out var parameterIds);
                 var motions = new ControllerMotionBake(clips, parameterIds, definitions);
+                var states = new List<ControllerStateDefinition>();
                 var transitions = new List<ControllerTransitionDefinition>();
                 var conditions = new List<ControllerCondition>();
-                var anyStart = transitions.Count;
-                AddTransitions(machine.anyStateTransitions, true, stateIds, parameterIds, definitions, transitions, conditions, path + "/Any State");
-                var anyCount = transitions.Count - anyStart;
-                var entryStart = transitions.Count;
-                foreach (var edge in Active(machine.entryTransitions))
+                var layerDefinitions = new List<ControllerLayerDefinition>();
+                var layerNames = new HashSet<string>(StringComparer.Ordinal);
+                for (var layerIndex = 0; layerIndex < layers.Length; layerIndex++)
                 {
-                    Require(edge.destinationStateMachine == null && !edge.isExit && edge.destinationState != null && stateIds.ContainsKey(edge.destinationState), path + "/Entry", "Entry must target a root clip state.");
-                    var start = conditions.Count;
-                    AddConditions(edge.conditions, parameterIds, definitions, conditions, path + "/Entry");
-                    transitions.Add(new ControllerTransitionDefinition { Destination = stateIds[edge.destinationState], ConditionStart = start, ConditionCount = conditions.Count - start });
-                }
-                var entryCount = transitions.Count - entryStart;
-                var names = new HashSet<string>(StringComparer.Ordinal);
-                for (var i = 0; i < children.Length; i++)
-                {
-                    var state = children[i].state; var statePath = path + "/" + state.name;
-                    Require(names.Add(state.name), statePath, "Duplicate state name.");
-                    Require(state.behaviours.Length == 0, statePath, "StateMachineBehaviour callbacks are unsupported.");
-                    Require(!state.writeDefaultValues, statePath, "Write Defaults is unsupported; disable it on this state.");
-                    Require(!state.iKOnFeet && !state.mirror && !state.mirrorParameterActive && !state.timeParameterActive
-                        && !state.cycleOffsetParameterActive, statePath, "IK, mirror, motion-time and cycle-offset parameters are unsupported.");
-                    Require(math.isfinite(state.speed) && math.isfinite(state.cycleOffset), statePath, "Speed and cycle offset must be finite.");
-                    var motion = state.motion as AnimationClip;
-                    var motionId = motions.Add(state.motion, statePath);
-                    var clipId = -1;
-                    for (var c = 0; c < clips.Count; c++) if (clips[c] == motion) { clipId = c; break; }
-                    var speedParameter = -1;
-                    if (state.speedParameterActive)
+                    var layer = layers[layerIndex]; path = assetPath + "/" + layer.name;
+                    Require(layerNames.Add(layer.name), path, "Duplicate layer name.");
+                    Require(!layer.iKPass, path, "Animator IK Pass is unsupported.");
+                    Require(layer.syncedLayerIndex < layerIndex && layer.syncedLayerIndex >= -1, path, "Synced layers must reference an earlier layer.");
+                    Require(math.isfinite(layer.defaultWeight) && layer.defaultWeight >= 0 && layer.defaultWeight <= 1, path, "Layer weight must be finite and within [0,1].");
+                    Require(layerIndex != 0 || layer.blendingMode == AnimatorLayerBlendingMode.Override && layer.syncedLayerIndex < 0, path, "Base layer must be an unsynced Override layer.");
+                    var sourceLayer = layerIndex;
+                    while (layers[sourceLayer].syncedLayerIndex >= 0) sourceLayer = layers[sourceLayer].syncedLayerIndex;
+                    var machine = layers[sourceLayer].stateMachine;
+                    Require(machine != null, path, "Missing state machine.");
+                    Require(machine.stateMachines.Length == 0, path, "Nested state machines are unsupported.");
+                    Require(machine.behaviours.Length == 0, path, "StateMachineBehaviour callbacks are unsupported.");
+                    var children = machine.states;
+                    Require(children.Length > 0, path, "At least one clip state is required.");
+                    var stateStart = states.Count;
+                    var stateIds = new Dictionary<AnimatorState, int>();
+                    for (var i = 0; i < children.Length; i++) stateIds.Add(children[i].state, stateStart + i);
+                    Require(machine.defaultState != null && stateIds.ContainsKey(machine.defaultState), path, "Default state is outside the root state machine.");
+                    var anyStart = transitions.Count;
+                    AddTransitions(machine.anyStateTransitions, true, stateIds, parameterIds, definitions, transitions, conditions, path + "/Any State");
+                    var anyCount = transitions.Count - anyStart;
+                    var entryStart = transitions.Count;
+                    foreach (var edge in Active(machine.entryTransitions))
                     {
-                        Require(parameterIds.TryGetValue(state.speedParameter, out speedParameter)
-                            && definitions[speedParameter].Type == AnimationParameterType.Float, statePath, "Speed multiplier requires an existing Float parameter.");
+                        Require(edge.destinationStateMachine == null && !edge.isExit && edge.destinationState != null && stateIds.ContainsKey(edge.destinationState), path + "/Entry", "Entry must target a root clip state.");
+                        var start = conditions.Count;
+                        AddConditions(edge.conditions, parameterIds, definitions, conditions, path + "/Entry");
+                        transitions.Add(new ControllerTransitionDefinition { Destination = stateIds[edge.destinationState], ConditionStart = start, ConditionCount = conditions.Count - start });
                     }
-                    var start = transitions.Count;
-                    AddTransitions(state.transitions, false, stateIds, parameterIds, definitions, transitions, conditions, statePath);
-                    states[i] = new ControllerStateDefinition { Path = Name(layer.name + "." + state.name, statePath), Clip = new ClipId(clipId), Motion = motionId,
-                        Duration = clipId >= 0 ? library.Value.Clips[clipId].Duration : 0, Speed = state.speed, CycleOffset = clipId < 0 || library.Value.Clips[clipId].IsLooping != 0 ? state.cycleOffset : 0,
-                        SpeedParameter = speedParameter, TransitionStart = start, TransitionCount = transitions.Count - start };
+                    var entryCount = transitions.Count - entryStart;
+                    var names = new HashSet<string>(StringComparer.Ordinal);
+                    for (var i = 0; i < children.Length; i++)
+                    {
+                        var state = children[i].state; var statePath = path + "/" + state.name;
+                        Require(names.Add(state.name), statePath, "Duplicate state name.");
+                        Require(state.behaviours.Length == 0, statePath, "StateMachineBehaviour callbacks are unsupported.");
+                        Require(!state.writeDefaultValues, statePath, "Write Defaults is unsupported; disable it on this state.");
+                        Require(!state.iKOnFeet && !state.mirror && !state.mirrorParameterActive && !state.timeParameterActive
+                            && !state.cycleOffsetParameterActive, statePath, "IK, mirror, motion-time and cycle-offset parameters are unsupported.");
+                        Require(math.isfinite(state.speed) && math.isfinite(state.cycleOffset), statePath, "Speed and cycle offset must be finite.");
+                        var effectiveMotion = EffectiveMotion(layers, layerIndex, state);
+                        if (layer.syncedLayerIndex >= 0) Require((layer.GetOverrideBehaviours(state)?.Length ?? 0) == 0, statePath, "Override StateMachineBehaviour callbacks are unsupported.");
+                        var motion = effectiveMotion as AnimationClip;
+                        var additive = layer.blendingMode == AnimatorLayerBlendingMode.Additive;
+                        var motionId = motions.Add(effectiveMotion, statePath, additive,
+                            additive && (layer.avatarMask == null || layer.avatarMask.GetHumanoidBodyPartActive(AvatarMaskBodyPart.Root)));
+                        var clipId = -1;
+                        for (var c = 0; c < clips.Count; c++) if (clips[c] == motion) { clipId = c; break; }
+                        var speedParameter = -1;
+                        if (state.speedParameterActive)
+                        {
+                            Require(parameterIds.TryGetValue(state.speedParameter, out speedParameter)
+                                && definitions[speedParameter].Type == AnimationParameterType.Float, statePath, "Speed multiplier requires an existing Float parameter.");
+                        }
+                        var start = transitions.Count;
+                        AddTransitions(state.transitions, false, stateIds, parameterIds, definitions, transitions, conditions, statePath);
+                        states.Add(new ControllerStateDefinition { Path = Name(layer.name + "." + state.name, statePath), Clip = new ClipId(clipId), Motion = motionId,
+                            Duration = clipId >= 0 ? library.Value.Clips[clipId].Duration : 0, Speed = state.speed, CycleOffset = clipId < 0 || library.Value.Clips[clipId].IsLooping != 0 ? state.cycleOffset : 0,
+                            SpeedParameter = speedParameter, TransitionStart = start, TransitionCount = transitions.Count - start });
+                    }
+                    layerDefinitions.Add(new ControllerLayerDefinition { Name = Name(layer.name, path), StateStart = stateStart, StateCount = children.Length,
+                        DefaultState = stateIds[machine.defaultState], AnyStart = anyStart, AnyCount = anyCount, EntryStart = entryStart, EntryCount = entryCount,
+                        SyncedLayer = layer.syncedLayerIndex, SyncedTiming = layer.syncedLayerAffectsTiming ? (byte)1 : (byte)0,
+                        Mask = compiledMasks.Add(layer.avatarMask, target, rig, path), DefaultWeight = layerIndex == 0 ? 1 : layer.defaultWeight,
+                        BlendMode = layer.blendingMode == AnimatorLayerBlendingMode.Additive ? PoseBlendMode.Additive : PoseBlendMode.Override });
                 }
-                using (var builder = new BlobBuilder(Allocator.Temp))
+                var builder = new BlobBuilder(Allocator.Temp);
+                try
                 {
                     ref var root = ref builder.ConstructRoot<AnimatorControllerBlob>();
                     root.Version = AnimatorControllerBlob.CurrentVersion; root.LibraryKey = library.Value.ContentKey;
-                    root.DefaultState = stateIds[machine.defaultState]; root.AnyStart = anyStart; root.AnyCount = anyCount;
-                    root.EntryStart = entryStart; root.EntryCount = entryCount;
+                    var first = layerDefinitions[0];
+                    root.DefaultState = first.DefaultState; root.AnyStart = first.AnyStart; root.AnyCount = first.AnyCount;
+                    root.EntryStart = first.EntryStart; root.EntryCount = first.EntryCount;
                     var targetParameters = builder.Allocate(ref root.Parameters, definitions.Length);
                     for (var i = 0; i < definitions.Length; i++) targetParameters[i] = definitions[i];
-                    var targetStates = builder.Allocate(ref root.States, states.Length);
-                    for (var i = 0; i < states.Length; i++) targetStates[i] = states[i];
+                    var targetStates = builder.Allocate(ref root.States, states.Count);
+                    for (var i = 0; i < states.Count; i++) targetStates[i] = states[i];
                     var targetTransitions = builder.Allocate(ref root.Transitions, transitions.Count);
                     for (var i = 0; i < transitions.Count; i++) targetTransitions[i] = transitions[i];
                     var targetConditions = builder.Allocate(ref root.Conditions, conditions.Count);
@@ -103,10 +128,26 @@ namespace AnimationSystemDOTS.Editor.Baking
                     for (var i = 0; i < motions.Nodes.Count; i++) targetMotions[i] = motions.Nodes[i];
                     var targetChildren = builder.Allocate(ref root.MotionChildren, motions.Children.Count);
                     for (var i = 0; i < motions.Children.Count; i++) targetChildren[i] = motions.Children[i];
+                    var targetLayers = builder.Allocate(ref root.Layers, layerDefinitions.Count);
+                    for (var i = 0; i < layerDefinitions.Count; i++) targetLayers[i] = layerDefinitions[i];
+                    compiledMasks.CopyTo(ref builder, ref root);
                     return new ControllerBakeResult { Success = true, Controller = builder.CreateBlobAssetReference<AnimatorControllerBlob>(Allocator.Persistent), Diagnostics = Array.Empty<string>() };
                 }
+                finally { builder.Dispose(); }
             }
             catch (ArgumentException exception) { return new ControllerBakeResult { Diagnostics = new[] { exception.Message } }; }
+            finally { compiledMasks.Dispose(); }
+        }
+
+        static Motion EffectiveMotion(AnimatorControllerLayer[] layers, int layer, AnimatorState state)
+        {
+            while (layers[layer].syncedLayerIndex >= 0)
+            {
+                var motion = layers[layer].GetOverrideMotion(state);
+                if (motion != null) return motion;
+                layer = layers[layer].syncedLayerIndex;
+            }
+            return state.motion;
         }
 
         static AnimationParameterDefinition[] Parameters(AnimatorController source, string path, out Dictionary<string, int> ids)

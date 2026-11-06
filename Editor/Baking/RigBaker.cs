@@ -40,6 +40,8 @@ namespace AnimationSystemDOTS.Editor.Baking
                 {
                     if (controllerAuthoring.Controller == null) throw new ArgumentException("AnimationControllerAuthoring requires a .controller source.");
                     DependsOn(controllerAuthoring.Controller);
+                    if (controllerAuthoring.Controller is UnityEditor.Animations.AnimatorController graphSource)
+                        foreach (var layer in graphSource.layers) if (layer.avatarMask != null) DependsOn(layer.avatarMask);
                     foreach (var clip in controllerAuthoring.Controller.animationClips) if (!inputs.Contains(clip)) inputs.Add(clip);
                 }
                 var preciseHumanoid = authoring.Settings.HumanoidPoseMode == HumanoidPoseMode.PreciseMuscles && animator != null
@@ -68,7 +70,7 @@ namespace AnimationSystemDOTS.Editor.Baking
                 library = libraryResult.Library; ownsLibrary = true;
                 if (controllerAuthoring != null)
                 {
-                    var result = ControllerBakePipeline.Build(controllerAuthoring.Controller, inputs, library);
+                    var result = ControllerBakePipeline.Build(controllerAuthoring.Controller, inputs, library, authoring.gameObject, rig);
                     if (!result.Success) throw new ArgumentException(string.Join("\n", result.Diagnostics));
                     controller = result.Controller; ownsController = true;
                 }
@@ -101,7 +103,10 @@ namespace AnimationSystemDOTS.Editor.Baking
                 {
                     AddComponent(entity, new AnimationController { Definition = controller });
                     AddComponent(entity, new ControllerLayerState());
-                    AddBuffer<ControllerMotionValue>(entity);
+                    AddBuffer<ControllerMotionValue>(entity).ResizeUninitialized(controller.Value.Motions.Length);
+                    AddBuffer<ControllerCachedRequest>(entity);
+                    var layerStates = AddBuffer<ControllerLayerRuntime>(entity);
+                    for (var l = 0; l < controller.Value.Layers.Length; l++) layerStates.Add(new ControllerLayerRuntime { Weight = controller.Value.Layers[l].DefaultWeight });
                     var parameters = AddBuffer<AnimationParameterValue>(entity);
                     for (var p = 0; p < controller.Value.Parameters.Length; p++)
                     {

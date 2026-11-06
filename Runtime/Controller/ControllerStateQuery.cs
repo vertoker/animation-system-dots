@@ -15,6 +15,7 @@ namespace AnimationSystemDOTS
         public byte NormalizedTransition;
         public ControllerEvaluationResult Result;
         public byte RetainPose;
+        public BlobAssetReference<AnimatorControllerBlob> Definition;
     }
     public struct ControllerStateSnapshot
     {
@@ -24,6 +25,11 @@ namespace AnimationSystemDOTS
     }
     public static class ControllerStateQuery
     {
+        public static bool TryGet(DynamicBuffer<ControllerLayerRuntime> layers, int index, out ControllerStateSnapshot snapshot)
+        {
+            snapshot = default;
+            return (uint)index < (uint)layers.Length && TryGet(layers[index].State, out snapshot);
+        }
         public static bool TryGet(in ControllerLayerState layer, out ControllerStateSnapshot snapshot)
         {
             snapshot = default;

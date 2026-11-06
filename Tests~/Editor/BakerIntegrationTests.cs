@@ -245,9 +245,59 @@ namespace AnimationSystemDOTS.Tests
                     var entity = rigs.GetSingletonEntity();
                     Assert.That(world.EntityManager.HasComponent<ControllerLayerState>(entity), Is.False);
                     Assert.That(world.EntityManager.HasBuffer<AnimationParameterValue>(entity), Is.False);
+                    Assert.That(world.EntityManager.HasBuffer<ControllerLayerRuntime>(entity), Is.False);
+                    Assert.That(world.EntityManager.HasBuffer<ControllerCachedRequest>(entity), Is.False);
+                    Assert.That(world.EntityManager.HasBuffer<ControllerMotionValue>(entity), Is.False);
                     Assert.That(world.EntityManager.GetComponentData<AnimationPlaybackMode>(entity).Value, Is.EqualTo(PlaybackDriver.Scripted));
                 }
             }
+        }
+
+        [UnityTest]
+        public IEnumerator SubScene_LayerMaskAndExternalReferenceEditsInvalidateOwnedData()
+        {
+            var source = CreateSkinFixture(); var clip = source.GetComponent<AnimationLibraryAuthoring>().Clips[0];
+            var reference = UnityEngine.Object.Instantiate(clip); reference.name = "External reference";
+            AnimationUtility.SetEditorCurve(reference, EditorCurveBinding.FloatCurve("MovingParent", typeof(Transform), "m_LocalPosition.x"), AnimationCurve.Constant(0, 1, .5f));
+            AssetDatabase.CreateAsset(reference, folder + "/Reference.anim");
+            var additive = UnityEngine.Object.Instantiate(clip); additive.name = "Additive";
+            var settings = AnimationUtility.GetAnimationClipSettings(additive); settings.hasAdditiveReferencePose = true;
+            settings.additiveReferencePoseClip = reference; settings.additiveReferencePoseTime = .25f;
+            AnimationUtility.SetAnimationClipSettings(additive, settings); AssetDatabase.CreateAsset(additive, folder + "/Additive.anim");
+            var controller = UnityEditor.Animations.AnimatorController.CreateAnimatorControllerAtPath(folder + "/Layered.controller");
+            var state = controller.layers[0].stateMachine.AddState("Move"); state.motion = clip; state.writeDefaultValues = false;
+            controller.layers[0].stateMachine.defaultState = state; controller.AddLayer("Upper");
+            var layers = controller.layers; layers[1].defaultWeight = .35f; layers[1].blendingMode = UnityEditor.Animations.AnimatorLayerBlendingMode.Additive;
+            state = layers[1].stateMachine.AddState("Add"); state.motion = additive; state.writeDefaultValues = false; layers[1].stateMachine.defaultState = state;
+            var mask = new AvatarMask { transformCount = 4 };
+            var paths = new[] { "", "MovingParent", "MovingParent/RootBone", "MovingParent/RootBone/Tip" };
+            for (var i = 0; i < paths.Length; i++) { mask.SetTransformPath(i, paths[i]); mask.SetTransformActive(i, i == 1); }
+            AssetDatabase.CreateAsset(mask, folder + "/Upper.mask"); layers[1].avatarMask = mask; controller.layers = layers;
+            source.AddComponent<AnimationControllerAuthoring>().Controller = controller;
+            var path = folder + "/Layered.unity"; Assert.That(EditorSceneManager.SaveScene(authoringScene, path), Is.True);
+            Unity.Scenes.Editor.LiveConversionEditorSettings.LiveConversionEnabled = true; CreateWorld(true);
+            var streamed = SceneSystem.LoadSceneAsync(world.Unmanaged, new Unity.Entities.Hash128(AssetDatabase.AssetPathToGUID(path)));
+            using (var query = world.EntityManager.CreateEntityQuery(typeof(AnimationController)))
+            {
+                yield return WaitUntil(() => query.CalculateEntityCount() == 1, "Layered controller did not bake.");
+                var graph = query.GetSingleton<AnimationController>().Definition;
+                Assert.That(graph.Value.Layers.Length, Is.EqualTo(2)); Assert.That(graph.Value.Masks.Length, Is.EqualTo(1));
+                Assert.That(graph.Value.Masks[0].Weights[1], Is.EqualTo(1));
+                Assert.That(world.EntityManager.GetBuffer<ControllerLayerRuntime>(query.GetSingletonEntity())[1].Weight, Is.EqualTo(.35f));
+                var maskKey = graph.Value.Masks[0].ContentKey.ToString(); var additiveIndex = graph.Value.States[1].Clip.Value;
+                Assert.That(world.EntityManager.GetComponentData<AnimationRig>(query.GetSingletonEntity()).Library.Value.Clips[additiveIndex].ReferencePose[1].Position.x, Is.EqualTo(.5f).Within(1e-5));
+                mask.SetTransformActive(1, false); EditorUtility.SetDirty(mask); AssetDatabase.SaveAssets();
+                yield return WaitUntil(() => query.CalculateEntityCount() == 1 && query.GetSingleton<AnimationController>().Definition.Value.Masks[0].ContentKey.ToString() != maskKey,
+                    "Mask asset edit did not invalidate the embedded graph mask.");
+                Assert.That(query.GetSingleton<AnimationController>().Definition.Value.Masks[0].Weights[1], Is.Zero);
+                var oldLibrary = world.EntityManager.GetComponentData<AnimationRig>(query.GetSingletonEntity()).Library.Value.ContentKey.ToString();
+                AnimationUtility.SetEditorCurve(reference, EditorCurveBinding.FloatCurve("MovingParent", typeof(Transform), "m_LocalPosition.x"), AnimationCurve.Constant(0, 1, .75f));
+                EditorUtility.SetDirty(reference); AssetDatabase.SaveAssets();
+                yield return WaitUntil(() => query.CalculateEntityCount() == 1 && world.EntityManager.GetComponentData<AnimationRig>(query.GetSingletonEntity()).Library.Value.ContentKey.ToString() != oldLibrary,
+                    "External additive reference edit did not invalidate the library.");
+                Assert.That(world.EntityManager.GetComponentData<AnimationRig>(query.GetSingletonEntity()).Library.Value.Clips[additiveIndex].ReferencePose[1].Position.x, Is.EqualTo(.75f).Within(1e-5));
+            }
+            SceneSystem.UnloadScene(world.Unmanaged, streamed); world.Update();
         }
         int RenderCount() { using (var q = world.EntityManager.CreateEntityQuery(typeof(AnimationSystemDOTS.Rendering.AnimatedRenderBinding))) return q.CalculateEntityCount(); }
         int ExportCount() { using (var q = world.EntityManager.CreateEntityQuery(typeof(BoneExportBinding))) return q.CalculateEntityCount(); }

@@ -15,21 +15,23 @@ namespace AnimationSystemDOTS
                 if (node.Type == ControllerMotionType.Clip)
                 { scratch[i] = new ControllerMotionValue { Duration = library.Clips[node.Clip.Value].Duration }; continue; }
                 var total = 0f;
+                double durationTotal = 0;
                 for (var c = 0; c < node.ChildCount; c++)
                 {
                     ref var edge = ref graph.MotionChildren[node.ChildStart + c];
                     var value = scratch[edge.Motion];
                     value.ChildWeight = RawWeight(ref graph, ref node, c, parameters);
-                    scratch[edge.Motion] = value; total += value.ChildWeight;
+                    scratch[edge.Motion] = value; total += value.ChildWeight; durationTotal += value.ChildWeight;
                 }
                 double duration = 0;
                 for (var c = 0; c < node.ChildCount; c++)
                 {
                     ref var edge = ref graph.MotionChildren[node.ChildStart + c]; var value = scratch[edge.Motion];
+                    var durationWeight = durationTotal > 0 ? value.ChildWeight / durationTotal : 0;
                     var divisor = node.Type == ControllerMotionType.Direct ? math.max(total, 1) : total;
                     value.ChildWeight = divisor > 0 ? value.ChildWeight / divisor : 0;
                     var childScale = graph.Motions[edge.Motion].Type == ControllerMotionType.Clip ? math.abs(edge.TimeScale) : 1;
-                    if (total > 0) duration += value.Duration / childScale * value.ChildWeight * (node.Type == ControllerMotionType.Direct && total < 1 ? 1 / total : 1);
+                    duration += value.Duration / childScale * durationWeight;
                     scratch[edge.Motion] = value;
                 }
                 scratch[i] = new ControllerMotionValue { Duration = duration > 0 ? duration : 1 };

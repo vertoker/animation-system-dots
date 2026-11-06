@@ -12,6 +12,9 @@ namespace AnimationSystemDOTS
     {
         public float Float;
         public int Int;
+        // A trigger remains visible to all layers during one evaluation step.
+        // Accepted conditions are committed only after every layer has run.
+        internal byte Consumed;
     }
     public enum AnimationParameterResult : byte { Success, InvalidId, InvalidType, InvalidValue, InvalidLayout }
 }
