@@ -92,10 +92,10 @@ Files: create `Samples~/Sandbox/Editor/AnimatorValidationFixtures.cs`, `Fixtures
 
 Interfaces: unmanaged `CharacterMotor.Step` consumes fixed input/motor settings/delta and outputs transform/ground/jump state; GO wrapper uses that result plus shared parameter IDs. One editable controller defines locomotion trees, jump/action variants, nested machine and masked upper-body override/additive demonstrations. Explicit debug mode covers tree types that do not fit normal locomotion.
 
-- [ ] Write deterministic motor tests (diagonal speed, sprint, jump/landing, bounds, repeated input trace); run red and implement shared motor.
-- [ ] Generate the controller from real imported roles, approximately 25–40 useful motions if usable; validate conversion with all features introduced in tasks 3–5. Add asset identity and transition coverage assertions.
-- [ ] Create GO scene with camera, directional light, simple arena, WASD/Shift/Space/mouse and action/reset controls; UI shows state, layers, parameters and debug mode. Native Animator owns pose, motor owns root.
-- [ ] Play-test and capture evidence. Commit scene, controller, adapter and tests.
+- [x] Write deterministic motor tests (diagonal speed, sprint, jump/landing, bounds, repeated input trace); run red and implement shared motor.
+- [x] Generate the controller from real imported roles, approximately 25–40 useful motions if usable; validate conversion with all features introduced in tasks 3–5. Add asset identity and transition coverage assertions.
+- [x] Create GO scene with camera, directional light, simple arena, WASD/Shift/Space/mouse and action/reset controls; UI shows state, layers, parameters and debug mode. Native Animator owns pose, motor owns root.
+- [x] Play-test and capture evidence. Commit scene, controller, adapter and tests.
 
 ## Task 7 — ECS player and 100 autonomous bots
 

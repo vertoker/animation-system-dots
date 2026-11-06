@@ -9,6 +9,16 @@ namespace AnimationSystemDOTS.Sandbox.Tests
 {
     public class AnimatorValidationAssetTests
     {
+        [Test]
+        public void JumpSources_ExtractRootHeightBecauseTheMotorOwnsJumpTrajectory()
+        {
+            var inventory = JsonUtility.FromJson<Inventory>(File.ReadAllText(Root + "MotionInventory.json"));
+            foreach (var motion in inventory.motions.Where(x => x.role == "Jump"))
+            {
+                var importer = (ModelImporter)AssetImporter.GetAtPath(motion.asset);
+                Assert.That(importer.clipAnimations.All(x => !x.lockRootHeightY), Is.True, motion.source + " would bake jump height into the pose twice.");
+            }
+        }
         const string MarkerGuid = "90e73d0213914c0caa70529fcbcb2f13";
         static string Root => AssetDatabase.GUIDToAssetPath(MarkerGuid).Replace("SandboxMarker.txt", "Humanoid/Mixamo/");
 

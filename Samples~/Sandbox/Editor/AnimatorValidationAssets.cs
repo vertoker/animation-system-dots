@@ -85,7 +85,9 @@ namespace AnimationSystemDOTS.Sandbox.Editor
                 clip.loopTime = IsLoop(Role(basename)); clip.loopPose = false;
                 clip.lockRootRotation = true; clip.keepOriginalOrientation = true;
                 clip.lockRootPositionXZ = false; clip.keepOriginalPositionXZ = true;
-                clip.lockRootHeightY = true; clip.keepOriginalPositionY = true;
+                // The sample motor owns the full jump trajectory. Extracting Y
+                // prevents the pose from adding the clip's jump height again.
+                clip.lockRootHeightY = Role(basename) != "Jump"; clip.keepOriginalPositionY = true;
                 clip.heightFromFeet = false;
             }
             importer.clipAnimations = clips;
