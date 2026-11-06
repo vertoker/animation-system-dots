@@ -69,6 +69,12 @@ namespace AnimationSystemDOTS
             static void BlendControllerLayer(ref BoneLocalPose result, in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests,
                 in DynamicBuffer<SampledBonePose> samples, int layer, int bone, int count)
             {
+                var grouped = false;
+                for (var r = 0; r < requests.Length; r++) if (requests[r].Layer == layer && requests[r].MotionWeight > 0) { grouped = true; break; }
+                if (grouped)
+                {
+                    BlendControllerStates(ref result, rig, requests, samples, layer, bone, count); return;
+                }
                 var position = float3.zero; var scale = float3.zero; var rotation = float4.zero;
                 var reference = quaternion.identity; var total = 0f; var influence = 0f; var mode = PoseBlendMode.Override;
                 for (var i = 0; i < requests.Length; i++)
@@ -111,6 +117,59 @@ namespace AnimationSystemDOTS
                     result.Position = math.lerp(result.Position, pose.Position, influence);
                     result.Scale = math.lerp(result.Scale, pose.Scale, influence);
                     result.Rotation = math.nlerp(result.Rotation, pose.Rotation, influence);
+                }
+            }
+            static void BlendControllerStates(ref BoneLocalPose result, in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests,
+                in DynamicBuffer<SampledBonePose> samples, int layer, int bone, int count)
+            {
+                var position = float3.zero; var scale = float3.zero; var rotation = float4.zero;
+                var reference = quaternion.identity; var total = 0f; var influence = 0f; var mode = PoseBlendMode.Override;
+                for (var slot = 0; slot < 2; slot++)
+                {
+                    var p = float3.zero; var s = float3.zero; var q = float4.zero;
+                    var qReference = quaternion.identity; var motionTotal = 0f; var stateWeight = 0f;
+                    for (var r = 0; r < requests.Length; r++)
+                    {
+                        var request = requests[r]; var sample = samples[r * count + bone];
+                        if (request.Layer != layer || request.StateSlot != slot || sample.IsValid == 0 || request.MotionWeight <= 0) continue;
+                        var layerRequest = request; layerRequest.Weight = request.LayerWeight;
+                        influence = math.max(influence, Weight(layerRequest, rig, bone, count));
+                        mode = request.BlendMode; stateWeight = request.StateWeight;
+                        var pose = sample.Pose;
+                        if (mode == PoseBlendMode.Additive)
+                        {
+                            ref var additive = ref rig.Library.Value.Clips[request.Clip.Value].ReferencePose[bone];
+                            pose.Position -= additive.Position; pose.Scale -= additive.Scale; pose.Rotation = math.mul(math.inverse(additive.Rotation), pose.Rotation);
+                        }
+                        if (motionTotal == 0) qReference = pose.Rotation;
+                        p += pose.Position * request.MotionWeight; s += pose.Scale * request.MotionWeight;
+                        q += pose.Rotation.value * (math.dot(qReference.value, pose.Rotation.value) < 0 ? -request.MotionWeight : request.MotionWeight);
+                        motionTotal += request.MotionWeight;
+                    }
+                    if (motionTotal <= 0 || stateWeight <= 0) continue;
+                    if (mode == PoseBlendMode.Override)
+                    {
+                        var rest = rig.Rig.Value.RestLocalPoses[bone]; var missing = math.max(0, 1 - motionTotal);
+                        p += rest.Position * missing; s += rest.Scale * missing;
+                        q += rest.Rotation.value * (math.dot(qReference.value, rest.Rotation.value) < 0 ? -missing : missing);
+                    }
+                    var stateRotation = math.normalizesafe(new quaternion(q), quaternion.identity);
+                    if (total == 0) reference = stateRotation;
+                    position += p * stateWeight; scale += s * stateWeight;
+                    rotation += stateRotation.value * (math.dot(reference.value, stateRotation.value) < 0 ? -stateWeight : stateWeight); total += stateWeight;
+                }
+                if (total <= 0 || influence <= 0) return;
+                var layerRotation = math.normalizesafe(new quaternion(rotation), quaternion.identity);
+                if (mode == PoseBlendMode.Additive)
+                {
+                    var weighted = math.normalizesafe(new quaternion(new float4(layerRotation.value.xyz * influence, layerRotation.value.w)), quaternion.identity);
+                    result.Position += position * influence; result.Scale += scale * influence;
+                    result.Rotation = math.normalize(math.mul(result.Rotation, weighted));
+                }
+                else
+                {
+                    result.Position = math.lerp(result.Position, position, influence); result.Scale = math.lerp(result.Scale, scale, influence);
+                    result.Rotation = math.nlerp(result.Rotation, layerRotation, influence);
                 }
             }
             static float Weight(in AnimationClipRequest request, in AnimationRig rig, int bone, int count)

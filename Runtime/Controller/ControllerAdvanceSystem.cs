@@ -89,7 +89,7 @@ namespace AnimationSystemDOTS
                         // last authoritative state, before copying the synced source.
                         if (layers[l].State.Initialized != 0)
                         { previous = layers[l].State.NormalizedTime; nextPrevious = layers[l].State.NextNormalizedTime; }
-                        Emit(ref graph, ref rig.Library.Value, controller.Definition, ref item.State, definition, l, item.Weight, scratch, previous, nextPrevious, cache, requests);
+                        Emit(ref graph, ref rig.Library.Value, controller.Definition, ref item.State, definition, l, item.Weight, parameters, scratch, previous, nextPrevious, cache, requests);
                     }
                     else AdvanceLayer(ref graph, ref rig.Library.Value, controller.Definition, ref item.State, definition, l, dt,
                         l == 0 ? 1 : item.Weight, parameters, scratch, layers, cache, requests);
@@ -144,13 +144,15 @@ namespace AnimationSystemDOTS
                 }
                 else
                 {
-                    var edge = Find(ref graph, layer.AnyStart, layer.AnyCount, state.CurrentState, previous, state.NormalizedTime, parameters, out var remainingFraction);
+                    var edge = FindAny(ref graph, layer, state.CurrentState, previous, state.NormalizedTime, parameters, out var remainingFraction);
                     if (edge < 0) edge = Find(ref graph, current.TransitionStart, current.TransitionCount,
-                        state.CurrentState, previous, state.NormalizedTime, parameters, out remainingFraction);
+                        layer.RootMachine, state.CurrentState, previous, state.NormalizedTime, parameters, out remainingFraction);
                     if (edge >= 0)
                     {
                         ref var transition = ref graph.Transitions[edge]; Consume(ref graph, ref transition, parameters);
-                        var target = transition.Destination < 0 ? Entry(ref graph, layer, parameters) : transition.Destination;
+                        var target = graph.Machines.Length > 0 ? ControllerMachineRuntime.Destination(ref graph, ref transition, layer.RootMachine, parameters, true)
+                            : transition.Destination < 0 ? Entry(ref graph, layer, parameters) : transition.Destination;
+                        if ((uint)target >= (uint)graph.States.Length) { state.Result = ControllerEvaluationResult.InvalidDefinition; return; }
                         state.NextState = target; state.NextSequence = ++state.Sequence;
                         nextPrevious = state.NextNormalizedTime = transition.Offset;
                         state.NormalizedTransition = transition.FixedDuration == 0 ? (byte)1 : (byte)0;
@@ -163,7 +165,7 @@ namespace AnimationSystemDOTS
                         if (state.TransitionDuration <= state.TransitionTime) Promote(ref state, ref previous, nextPrevious);
                     }
                 }
-                Emit(ref graph, ref library, owner, ref state, layer, layerIndex, weight, scratch, previous, nextPrevious, cache, requests);
+                Emit(ref graph, ref library, owner, ref state, layer, layerIndex, weight, parameters, scratch, previous, nextPrevious, cache, requests);
             }
             static double Duration(ref AnimatorControllerBlob graph, int layerIndex, int stateIndex, DynamicBuffer<ControllerMotionValue> scratch,
                 DynamicBuffer<ControllerLayerRuntime> layers)
@@ -181,17 +183,17 @@ namespace AnimationSystemDOTS
                 return duration;
             }
             static void Emit(ref AnimatorControllerBlob graph, ref AnimationLibraryBlob library, BlobAssetReference<AnimatorControllerBlob> owner,
-                ref ControllerLayerState state, ControllerLayerDefinition layer, int layerIndex, float weight, DynamicBuffer<ControllerMotionValue> scratch,
+                ref ControllerLayerState state, ControllerLayerDefinition layer, int layerIndex, float weight, DynamicBuffer<AnimationParameterValue> parameters, DynamicBuffer<ControllerMotionValue> scratch,
                 double previous, double nextPrevious, DynamicBuffer<ControllerCachedRequest> cache, DynamicBuffer<AnimationClipRequest> requests)
             {
                 var start = requests.Length;
                 if (state.NextState >= 0)
                 {
                     var blend = state.TransitionDuration > 0 ? (float)(state.TransitionTime / state.TransitionDuration) : 1;
-                    Request(ref graph, ref library, ref graph.States[state.CurrentState], scratch, previous, state.NormalizedTime, 1 - blend, state.CurrentSequence, requests);
-                    Request(ref graph, ref library, ref graph.States[state.NextState], scratch, nextPrevious, state.NextNormalizedTime, blend, state.NextSequence, requests);
+                    Request(ref graph, ref library, ref graph.States[state.CurrentState], parameters, scratch, previous, state.NormalizedTime, 1 - blend, 0, state.CurrentSequence, requests);
+                    Request(ref graph, ref library, ref graph.States[state.NextState], parameters, scratch, nextPrevious, state.NextNormalizedTime, blend, 1, state.NextSequence, requests);
                 }
-                else Request(ref graph, ref library, ref graph.States[state.CurrentState], scratch, previous, state.NormalizedTime, 1, state.CurrentSequence, requests);
+                else Request(ref graph, ref library, ref graph.States[state.CurrentState], parameters, scratch, previous, state.NormalizedTime, 1, 0, state.CurrentSequence, requests);
                 if (requests.Length == start)
                 {
                     // A lone base layer retains the final pose directly, preserving
@@ -231,17 +233,30 @@ namespace AnimationSystemDOTS
                 state.CurrentSequence = state.NextSequence; previous = nextPrevious;
                 state.NextNormalizedTime = state.TransitionTime = state.TransitionDuration = 0;
             }
-            static void Request(ref AnimatorControllerBlob graph, ref AnimationLibraryBlob library, ref ControllerStateDefinition state, DynamicBuffer<ControllerMotionValue> scratch,
-                double previous, double time, float weight, ulong sequence, DynamicBuffer<AnimationClipRequest> requests)
+            static void Request(ref AnimatorControllerBlob graph, ref AnimationLibraryBlob library, ref ControllerStateDefinition source, DynamicBuffer<AnimationParameterValue> parameters, DynamicBuffer<ControllerMotionValue> scratch,
+                double previous, double time, float weight, byte slot, ulong sequence, DynamicBuffer<AnimationClipRequest> requests)
             {
-                if (graph.Motions.Length > 0) { ControllerMotionSolver.Emit(ref graph, ref library, ref state, scratch, previous, time, weight, sequence, requests); return; }
+                // Motion Time selects the sampled pose, not the state's clock or
+                // Exit Time gate. A cycle parameter replaces the authored offset.
+                var state = source;
+                if (state.HasTimeParameter != 0) previous = time = parameters[state.TimeParameter].Float;
+                if (state.HasCycleParameter != 0) state.CycleOffset = math.saturate(parameters[state.CycleParameter].Float);
+                if (graph.Motions.Length > 0)
+                {
+                    var start = requests.Length;
+                    ControllerMotionSolver.Emit(ref graph, ref library, ref state, scratch, previous, time, 1, sequence, requests);
+                    for (var i = start; i < requests.Length; i++)
+                    { var item = requests[i]; item.MotionWeight = item.Weight; item.StateWeight = weight; item.StateSlot = slot; item.Weight *= weight; requests[i] = item; }
+                    return;
+                }
                 requests.Add(new AnimationClipRequest { Clip = state.Clip,
                     PreviousTime = (state.Speed < 0 ? 1 - previous - state.CycleOffset : previous + state.CycleOffset) * state.Duration,
                     Time = (state.Speed < 0 ? 1 - time - state.CycleOffset : time + state.CycleOffset) * state.Duration,
-                    LoopBoundary = state.Speed < 0 ? ClipLoopBoundary.End : ClipLoopBoundary.Start, Weight = weight, InstanceSequence = sequence });
+                    LoopBoundary = state.Speed < 0 ? ClipLoopBoundary.End : ClipLoopBoundary.Start, Weight = weight, StateWeight = weight, MotionWeight = 1, StateSlot = slot, InstanceSequence = sequence });
             }
             static int Entry(ref AnimatorControllerBlob graph, ControllerLayerDefinition layer, DynamicBuffer<AnimationParameterValue> parameters)
             {
+                if (graph.Machines.Length > 0) return ControllerMachineRuntime.Entry(ref graph, layer.RootMachine, parameters, true);
                 for (var i = 0; i < layer.EntryCount; i++)
                 {
                     ref var edge = ref graph.Transitions[layer.EntryStart + i];
@@ -250,14 +265,29 @@ namespace AnimationSystemDOTS
                 }
                 return layer.DefaultState;
             }
-            static int Find(ref AnimatorControllerBlob graph, int start, int count, int current, double previous, double time,
+            static int FindAny(ref AnimatorControllerBlob graph, ControllerLayerDefinition layer, int current, double previous, double time,
+                DynamicBuffer<AnimationParameterValue> parameters, out double remainingFraction)
+            {
+                if (graph.Machines.Length == 0) return Find(ref graph, layer.AnyStart, layer.AnyCount, layer.RootMachine, current, previous, time, parameters, out remainingFraction);
+                for (var m = 0; m < graph.Machines.Length; m++)
+                {
+                    if (!ControllerMachineRuntime.IsAncestor(ref graph, m, graph.States[current].Machine)) continue;
+                    ref var machine = ref graph.Machines[m];
+                    var edge = Find(ref graph, machine.AnyStart, machine.AnyCount, layer.RootMachine, current, previous, time, parameters, out remainingFraction);
+                    if (edge >= 0) return edge;
+                }
+                remainingFraction = 0; return -1;
+            }
+            static int Find(ref AnimatorControllerBlob graph, int start, int count, int root, int current, double previous, double time,
                 DynamicBuffer<AnimationParameterValue> parameters, out double remainingFraction)
             {
                 remainingFraction = 0;
                 for (var i = 0; i < count; i++)
                 {
                     ref var edge = ref graph.Transitions[start + i];
-                    if (edge.Destination == current && edge.CanTransitionToSelf == 0 || !Matches(ref graph, ref edge, parameters)) continue;
+                    if (!Matches(ref graph, ref edge, parameters)) continue;
+                    var destination = graph.Machines.Length > 0 ? ControllerMachineRuntime.Destination(ref graph, ref edge, root, parameters, false) : edge.Destination;
+                    if (graph.Machines.Length > 0 && destination < 0 || destination == current && edge.CanTransitionToSelf == 0) continue;
                     if (edge.HasExitTime == 0) { if (edge.ConditionCount > 0) return start + i; continue; }
                     var gate = (double)edge.ExitTime;
                     if (gate < 1)
@@ -271,33 +301,9 @@ namespace AnimationSystemDOTS
                 return -1;
             }
             static bool Matches(ref AnimatorControllerBlob graph, ref ControllerTransitionDefinition edge, DynamicBuffer<AnimationParameterValue> parameters)
-            {
-                for (var i = 0; i < edge.ConditionCount; i++)
-                {
-                    ref var condition = ref graph.Conditions[edge.ConditionStart + i]; var value = parameters[condition.Parameter];
-                    var type = graph.Parameters[condition.Parameter].Type;
-                    var number = type == AnimationParameterType.Float ? (double)value.Float : value.Int;
-                    switch (condition.Mode)
-                    {
-                        case ControllerConditionMode.If: if (value.Int == 0) return false; break;
-                        case ControllerConditionMode.IfNot: if (value.Int != 0) return false; break;
-                        case ControllerConditionMode.Greater: if (!(number > condition.Threshold)) return false; break;
-                        case ControllerConditionMode.Less: if (!(number < condition.Threshold)) return false; break;
-                        case ControllerConditionMode.Equals: if (number != condition.Threshold) return false; break;
-                        case ControllerConditionMode.NotEqual: if (number == condition.Threshold) return false; break;
-                    }
-                }
-                return true;
-            }
+                => ControllerConditions.Matches(ref graph, ref edge, parameters);
             static void Consume(ref AnimatorControllerBlob graph, ref ControllerTransitionDefinition edge, DynamicBuffer<AnimationParameterValue> parameters)
-            {
-                for (var i = 0; i < edge.ConditionCount; i++)
-                {
-                    var id = graph.Conditions[edge.ConditionStart + i].Parameter;
-                    if (graph.Parameters[id].Type != AnimationParameterType.Trigger) continue;
-                    var value = parameters[id]; value.Consumed = 1; parameters[id] = value;
-                }
-            }
+                => ControllerConditions.Consume(ref graph, ref edge, parameters);
         }
     }
 }

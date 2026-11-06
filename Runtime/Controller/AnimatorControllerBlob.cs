@@ -5,7 +5,7 @@ namespace AnimationSystemDOTS
 {
     public struct AnimatorControllerBlob
     {
-        public const int CurrentVersion = 3;
+        public const int CurrentVersion = 5;
         public int Version;
         public FixedString128Bytes LibraryKey;
         public int DefaultState;
@@ -20,6 +20,7 @@ namespace AnimationSystemDOTS
         public BlobArray<ControllerMotionChild> MotionChildren;
         public BlobArray<ControllerLayerDefinition> Layers;
         public BlobArray<BoneMaskBlob> Masks;
+        public BlobArray<ControllerMachineDefinition> Machines;
     }
     public struct ControllerLayerDefinition
     {
@@ -30,6 +31,13 @@ namespace AnimationSystemDOTS
         public float DefaultWeight;
         public PoseBlendMode BlendMode;
         public byte SyncedTiming;
+        public int RootMachine;
+    }
+    public struct ControllerMachineDefinition
+    {
+        public FixedString128Bytes Path;
+        public int Parent, DefaultState;
+        public int AnyStart, AnyCount, EntryStart, EntryCount, ExitStart, ExitCount;
     }
 
     public struct AnimationController : IComponentData
@@ -54,6 +62,9 @@ namespace AnimationSystemDOTS
         public float Speed, CycleOffset;
         public int SpeedParameter;
         public int TransitionStart, TransitionCount;
+        public int Machine;
+        public int TimeParameter, CycleParameter;
+        public byte HasTimeParameter, HasCycleParameter;
     }
     public enum ControllerMotionType : byte { Clip, Simple1D, SimpleDirectional2D, FreeformDirectional2D, FreeformCartesian2D, Direct }
     public struct ControllerMotionDefinition
@@ -89,5 +100,11 @@ namespace AnimationSystemDOTS
         public int ConditionStart, ConditionCount;
         public float Duration, Offset, ExitTime;
         public byte HasExitTime, FixedDuration, CanTransitionToSelf;
+        public ControllerDestinationKind DestinationKind;
+        public int SourceMachine;
+        public ControllerInterruptionSource Interruption;
+        public byte OrderedInterruption;
     }
+    public enum ControllerDestinationKind : byte { State, Machine, Exit }
+    public enum ControllerInterruptionSource : byte { None, Source, Destination, SourceThenDestination, DestinationThenSource }
 }

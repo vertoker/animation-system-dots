@@ -20,5 +20,9 @@ namespace AnimationSystemDOTS
         public BlobAssetReference<AnimatorControllerBlob> MaskController;
         public int ControllerMask;
         public float LayerWeight;
+        // Native controller transitions blend complete state streams. Preserve
+        // each state's influence separately from its leaf motion weights.
+        public float StateWeight, MotionWeight;
+        public byte StateSlot;
     }
 }
