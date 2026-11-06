@@ -82,9 +82,9 @@ Files: split machine conversion and runtime transition logic into focused files 
 
 Interfaces: immutable machine paths/entry/exit links and layer roots; interruption source/ordered flags, bounded transition history per entity/layer; parameter APIs retain typed validation and trigger semantics.
 
-- [ ] Write native fixed-step traces for nested Entry/Exit, AnyState priority, state-machine transitions, self transitions, fixed/normalized duration, offsets, current/next/all interruption orders, speed/cycle/time parameters and synced layers/timing.
-- [ ] Implement each path from observed failing traces. Preserve accepted trigger consumption and prior negative speed/ExitTime behavior.
-- [ ] Test lifecycle/reset/rebake and old single-layer fixtures, document supported features/precise rejections. Commit.
+- [x] Write native fixed-step traces for nested Entry/Exit, AnyState priority, state-machine transitions, self transitions, fixed/normalized duration, offsets, current/next/all interruption orders, speed/cycle/time parameters and synced layers/timing.
+- [x] Implement each path from observed failing traces. Preserve accepted trigger consumption and prior negative speed/ExitTime behavior.
+- [x] Test lifecycle/reset/rebake and old single-layer fixtures, document supported features/precise rejections. Commit.
 
 ## Task 6 — one rich shared controller and native GO player
 

@@ -82,7 +82,7 @@ namespace AnimationSystemDOTS
     }
     public struct ControllerMotionValue : IBufferElementData
     {
-        public double Duration, PreviousTime, Time;
+        public double Duration, PreviousTime, Time, PhaseOffset;
         public float Weight, ChildWeight;
         public byte Reversed;
     }

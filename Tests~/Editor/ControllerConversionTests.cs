@@ -90,10 +90,10 @@ namespace AnimationSystemDOTS.Tests
         }
         [TestCase("writeDefaults")]
         [TestCase("emptyTree")]
-        [TestCase("nested")]
+        [TestCase("emptyMachine")]
         [TestCase("emptyLayer")]
         [TestCase("behaviour")]
-        [TestCase("interruption")]
+        [TestCase("missingTimeParameter")]
         [TestCase("missingParameter")]
         [TestCase("intIf")]
         [TestCase("floatEquals")]
@@ -105,13 +105,13 @@ namespace AnimationSystemDOTS.Tests
             {
                 case "writeDefaults": first.writeDefaultValues = true; break;
                 case "emptyTree": first.motion = new BlendTree(); break;
-                case "nested": machine.AddStateMachine("Nested"); break;
+                case "emptyMachine": machine.AddStateMachine("Nested"); break;
                 case "emptyLayer": source.AddLayer("Extra"); break;
                 case "behaviour":
                     var behaviour = ScriptableObject.CreateInstance<ControllerTestBehaviour>();
                     AssetDatabase.AddObjectToAsset(behaviour, source);
                     first.behaviours = new StateMachineBehaviour[] { behaviour }; break;
-                case "interruption": first.AddTransition(machine.states[1].state).interruptionSource = TransitionInterruptionSource.Source; break;
+                case "missingTimeParameter": first.timeParameterActive = true; first.timeParameter = "Missing"; break;
                 case "missingParameter": first.AddTransition(machine.states[1].state).AddCondition(AnimatorConditionMode.If, 0, "Missing"); break;
                 case "intIf": first.AddTransition(machine.states[1].state).AddCondition(AnimatorConditionMode.If, 0, "Count"); break;
                 case "floatEquals": first.AddTransition(machine.states[1].state).AddCondition(AnimatorConditionMode.Equals, 0, "Speed"); break;

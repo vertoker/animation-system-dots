@@ -14,16 +14,25 @@ namespace AnimationSystemDOTS.Tests
         [TestCase("time", true)]
         [TestCase("timeCycle", true)]
         [TestCase("timeExit", true)]
+        [TestCase("cycleNonloop", false)]
+        [TestCase("reverseCycleNonloop", false)]
+        [TestCase("timeNonloop", false)]
+        [TestCase("cycleTreeNonloop", false)]
         public void StateParameters_ClocksAndPoseMatchNative(string scenario, bool nativeOnly)
         {
-            using (var oracle = new ControllerGraphOracle("parameters-" + scenario + (nativeOnly ? "-native" : "")))
+            using (var oracle = new ControllerGraphOracle("parameters-" + scenario + (nativeOnly ? "-native" : ""), looping: !scenario.EndsWith("Nonloop")))
             {
                 var a = oracle.State(oracle.Root, "A", 0); oracle.Root.defaultState = a;
-                if (scenario.Contains("Cycle") || scenario == "cycle")
+                if (scenario.Contains("Tree"))
+                {
+                    var tree = new UnityEditor.Animations.BlendTree { blendType = UnityEditor.Animations.BlendTreeType.Simple1D, blendParameter = "Time", useAutomaticThresholds = false };
+                    tree.AddChild(oracle.Clips[0], 0); tree.AddChild(oracle.Clips[1], 1); UnityEditor.AssetDatabase.AddObjectToAsset(tree, oracle.Source); a.motion = tree;
+                }
+                if (scenario.IndexOf("cycle", System.StringComparison.OrdinalIgnoreCase) >= 0)
                 { a.cycleOffset = .13f; a.cycleOffsetParameterActive = true; a.cycleOffsetParameter = "Cycle"; }
                 if (scenario.StartsWith("time"))
                 { a.timeParameterActive = true; a.timeParameter = "Time"; }
-                if (scenario == "reverseCycle") a.speed = -1;
+                if (scenario.StartsWith("reverseCycle")) a.speed = -1;
                 if (scenario == "timeExit")
                 {
                     var b = oracle.State(oracle.Root, "B", 1);

@@ -176,7 +176,6 @@ namespace AnimationSystemDOTS.Editor.Baking
         {
             foreach (var edge in Active(edges))
             {
-                Require(edge.interruptionSource == TransitionInterruptionSource.None, path, "Transition interruption is unsupported.");
                 var destination = Destination(edge, states, machines, path, out var destinationKind);
                 Require(!any || !edge.isExit, path, "Any State to Exit is unsupported.");
                 Require(math.isfinite(edge.duration) && edge.duration >= 0 && math.isfinite(edge.offset) && math.isfinite(edge.exitTime) && edge.exitTime >= 0,

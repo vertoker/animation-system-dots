@@ -105,6 +105,7 @@ namespace AnimationSystemDOTS.Editor.Baking
                     AddComponent(entity, new ControllerLayerState());
                     AddBuffer<ControllerMotionValue>(entity).ResizeUninitialized(controller.Value.Motions.Length);
                     AddBuffer<ControllerCachedRequest>(entity);
+                    if (!preciseHumanoid) AddBuffer<ControllerBoneHistory>(entity);
                     var layerStates = AddBuffer<ControllerLayerRuntime>(entity);
                     for (var l = 0; l < controller.Value.Layers.Length; l++) layerStates.Add(new ControllerLayerRuntime { Weight = controller.Value.Layers[l].DefaultWeight });
                     var parameters = AddBuffer<AnimationParameterValue>(entity);
@@ -121,6 +122,8 @@ namespace AnimationSystemDOTS.Editor.Baking
                     AddComponent(entity, new Humanoid.HumanoidBodyPose());
                     AddBuffer<Humanoid.HumanoidMuscleValue>(entity);
                     AddBuffer<Humanoid.HumanoidRootMuscleValue>(entity);
+                    AddBuffer<Humanoid.HumanoidControllerMuscleHistory>(entity);
+                    AddBuffer<Humanoid.HumanoidControllerBodyHistory>(entity);
                 }
                 AddComponent(entity, ClipPlaybackState.Initial);
                 AddBuffer<ScriptedPlaybackCommand>(entity);

@@ -8,24 +8,41 @@ namespace AnimationSystemDOTS
     [UpdateAfter(typeof(AnimationSampleSystem))]
     public partial class AnimationBlendSystem : SystemBase
     {
-        protected override void OnCreate() => RequireForUpdate<AnimationStepContext>();
-        protected override void OnUpdate() => Dependency = new BlendJob
-        { Controllers = GetComponentLookup<ControllerLayerState>(true), Playback = GetComponentLookup<AnimationPlaybackMode>(true) }.ScheduleParallel(Dependency);
+        EntityQuery missingHistory;
+        protected override void OnCreate()
+        {
+            RequireForUpdate<AnimationStepContext>();
+            missingHistory = GetEntityQuery(new EntityQueryDesc { All = new[] { ComponentType.ReadOnly<AnimationRig>(), ComponentType.ReadOnly<SampledBonePose>() },
+                None = new[] { ComponentType.ReadOnly<ControllerBoneHistory>(), ComponentType.ReadOnly<PreciseHumanoidPose>() } });
+        }
+        protected override void OnUpdate()
+        {
+            if (!missingHistory.IsEmptyIgnoreFilter) EntityManager.AddComponent<ControllerBoneHistory>(missingHistory);
+            Dependency = new BlendJob { Step = SystemAPI.GetSingleton<AnimationStepContext>(), Controllers = GetComponentLookup<ControllerLayerState>(true), Playback = GetComponentLookup<AnimationPlaybackMode>(true) }.ScheduleParallel(Dependency);
+        }
 
         [BurstCompile]
         [WithNone(typeof(PreciseHumanoidPose))]
         partial struct BlendJob : IJobEntity
         {
+            public AnimationStepContext Step;
             [ReadOnly] public ComponentLookup<ControllerLayerState> Controllers;
             [ReadOnly] public ComponentLookup<AnimationPlaybackMode> Playback;
             void Execute(Entity entity, in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests,
-                in DynamicBuffer<SampledBonePose> samples, DynamicBuffer<BoneLocalPose> local)
+                in DynamicBuffer<SampledBonePose> samples, DynamicBuffer<BoneLocalPose> local, DynamicBuffer<ControllerBoneHistory> history)
             {
                 var nativeController = Controllers.HasComponent(entity) && Playback.HasComponent(entity) && Playback[entity].Value == PlaybackDriver.Controller;
                 if (nativeController
                     && Controllers[entity].Result == ControllerEvaluationResult.Success && Controllers[entity].RetainPose != 0 && local.Length > 0) return;
                 if (!rig.Rig.IsCreated) { local.Clear(); return; }
                 var count = rig.Rig.Value.RestLocalPoses.Length;
+                if (nativeController)
+                {
+                    var layerCount = 0;
+                    for (var r = 0; r < requests.Length; r++) layerCount = math.max(layerCount, requests[r].Layer + 1);
+                    var required = count * layerCount;
+                    if (history.Length < required) history.Resize(required, NativeArrayOptions.ClearMemory);
+                }
                 local.ResizeUninitialized(count);
                 for (var bone = 0; bone < count; bone++)
                 {
@@ -42,7 +59,15 @@ namespace AnimationSystemDOTS
                         if (!found) break;
                         first = false; previousLayer = layer;
                         if (nativeController)
-                        { BlendControllerLayer(ref result, rig, requests, samples, layer, bone, count); continue; }
+                        {
+                            var index = layer * count + bone; var item = history[index];
+                            var definition = Controllers[entity].Definition;
+                            if (item.Definition != definition) item = new ControllerBoneHistory { Definition = definition };
+                            if (!item.Step.Repeats(Step))
+                            { item.BeforeStep = item.Previous; item.BeforeInitialized = item.Initialized; item.Step.Set(Step); }
+                            BlendControllerLayer(ref result, rig, requests, samples, layer, bone, count, ref item);
+                            history[index] = item; continue;
+                        }
                         var average = BoneLocalPose.Identity; double total = 0;
                         for (var i = 0; i < requests.Length; i++)
                         {
@@ -67,13 +92,13 @@ namespace AnimationSystemDOTS
                 }
             }
             static void BlendControllerLayer(ref BoneLocalPose result, in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests,
-                in DynamicBuffer<SampledBonePose> samples, int layer, int bone, int count)
+                in DynamicBuffer<SampledBonePose> samples, int layer, int bone, int count, ref ControllerBoneHistory history)
             {
                 var grouped = false;
                 for (var r = 0; r < requests.Length; r++) if (requests[r].Layer == layer && requests[r].MotionWeight > 0) { grouped = true; break; }
                 if (grouped)
                 {
-                    BlendControllerStates(ref result, rig, requests, samples, layer, bone, count); return;
+                    BlendControllerStates(ref result, rig, requests, samples, layer, bone, count, ref history); return;
                 }
                 var position = float3.zero; var scale = float3.zero; var rotation = float4.zero;
                 var reference = quaternion.identity; var total = 0f; var influence = 0f; var mode = PoseBlendMode.Override;
@@ -120,10 +145,11 @@ namespace AnimationSystemDOTS
                 }
             }
             static void BlendControllerStates(ref BoneLocalPose result, in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests,
-                in DynamicBuffer<SampledBonePose> samples, int layer, int bone, int count)
+                in DynamicBuffer<SampledBonePose> samples, int layer, int bone, int count, ref ControllerBoneHistory history)
             {
                 var position = float3.zero; var scale = float3.zero; var rotation = float4.zero;
                 var reference = quaternion.identity; var total = 0f; var influence = 0f; var mode = PoseBlendMode.Override;
+                var evaluated = false;
                 for (var slot = 0; slot < 2; slot++)
                 {
                     var p = float3.zero; var s = float3.zero; var q = float4.zero;
@@ -131,12 +157,23 @@ namespace AnimationSystemDOTS
                     for (var r = 0; r < requests.Length; r++)
                     {
                         var request = requests[r]; var sample = samples[r * count + bone];
-                        if (request.Layer != layer || request.StateSlot != slot || sample.IsValid == 0 || request.MotionWeight <= 0) continue;
+                        if (request.Layer != layer || request.StateSlot != slot || request.PoseSource == ControllerPoseSource.Motion && sample.IsValid == 0 || request.MotionWeight <= 0) continue;
                         var layerRequest = request; layerRequest.Weight = request.LayerWeight;
+                        evaluated |= request.LayerWeight > 0;
                         influence = math.max(influence, Weight(layerRequest, rig, bone, count));
                         mode = request.BlendMode; stateWeight = request.StateWeight;
                         var pose = sample.Pose;
-                        if (mode == PoseBlendMode.Additive)
+                        if (request.PoseSource != ControllerPoseSource.Motion)
+                        {
+                            var neutral = mode == PoseBlendMode.Additive ? new BoneLocalPose { Rotation = quaternion.identity } : rig.Rig.Value.RestLocalPoses[bone];
+                            if (request.PoseSource == ControllerPoseSource.Captured && history.FrozenSequence != request.InstanceSequence)
+                            {
+                                history.Frozen = history.BeforeInitialized != 0 ? history.BeforeStep : neutral;
+                                history.FrozenSequence = request.InstanceSequence;
+                            }
+                            pose = request.PoseSource == ControllerPoseSource.Captured ? history.Frozen : request.PoseSource == ControllerPoseSource.PreviousLayer && history.BeforeInitialized != 0 ? history.BeforeStep : neutral;
+                        }
+                        else if (mode == PoseBlendMode.Additive)
                         {
                             ref var additive = ref rig.Library.Value.Clips[request.Clip.Value].ReferencePose[bone];
                             pose.Position -= additive.Position; pose.Scale -= additive.Scale; pose.Rotation = math.mul(math.inverse(additive.Rotation), pose.Rotation);
@@ -158,8 +195,10 @@ namespace AnimationSystemDOTS
                     position += p * stateWeight; scale += s * stateWeight;
                     rotation += stateRotation.value * (math.dot(reference.value, stateRotation.value) < 0 ? -stateWeight : stateWeight); total += stateWeight;
                 }
-                if (total <= 0 || influence <= 0) return;
+                if (total <= 0) return;
                 var layerRotation = math.normalizesafe(new quaternion(rotation), quaternion.identity);
+                if (evaluated) { history.Previous = new BoneLocalPose { Position = position, Rotation = layerRotation, Scale = scale }; history.Initialized = 1; }
+                if (influence <= 0) return;
                 if (mode == PoseBlendMode.Additive)
                 {
                     var weighted = math.normalizesafe(new quaternion(new float4(layerRotation.value.xyz * influence, layerRotation.value.w)), quaternion.identity);

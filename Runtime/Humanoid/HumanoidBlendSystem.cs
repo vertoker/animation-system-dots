@@ -10,23 +10,40 @@ namespace AnimationSystemDOTS.Humanoid
     [UpdateBefore(typeof(AnimationPoseModificationSystemGroup))]
     public partial class HumanoidBlendSystem : SystemBase
     {
-        protected override void OnCreate() => RequireForUpdate<AnimationStepContext>();
-        protected override void OnUpdate() => Dependency = new BlendJob
-        { Controllers = GetComponentLookup<ControllerLayerState>(true), Playback = GetComponentLookup<AnimationPlaybackMode>(true) }.ScheduleParallel(Dependency);
+        EntityQuery missingMuscleHistory, missingBodyHistory;
+        protected override void OnCreate()
+        {
+            RequireForUpdate<AnimationStepContext>();
+            missingMuscleHistory = GetEntityQuery(new EntityQueryDesc { All = new[] { ComponentType.ReadOnly<HumanoidRigBinding>() }, None = new[] { ComponentType.ReadOnly<HumanoidControllerMuscleHistory>() } });
+            missingBodyHistory = GetEntityQuery(new EntityQueryDesc { All = new[] { ComponentType.ReadOnly<HumanoidRigBinding>() }, None = new[] { ComponentType.ReadOnly<HumanoidControllerBodyHistory>() } });
+        }
+        protected override void OnUpdate()
+        {
+            if (!missingMuscleHistory.IsEmptyIgnoreFilter) EntityManager.AddComponent<HumanoidControllerMuscleHistory>(missingMuscleHistory);
+            if (!missingBodyHistory.IsEmptyIgnoreFilter) EntityManager.AddComponent<HumanoidControllerBodyHistory>(missingBodyHistory);
+            Dependency = new BlendJob { Step = SystemAPI.GetSingleton<AnimationStepContext>(), Controllers = GetComponentLookup<ControllerLayerState>(true), Playback = GetComponentLookup<AnimationPlaybackMode>(true) }.ScheduleParallel(Dependency);
+        }
 
         [BurstCompile]
         partial struct BlendJob : IJobEntity
         {
+            public AnimationStepContext Step;
             [ReadOnly] public ComponentLookup<ControllerLayerState> Controllers;
             [ReadOnly] public ComponentLookup<AnimationPlaybackMode> Playback;
             void Execute(Entity entity, in HumanoidRigBinding binding, in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests,
-                ref HumanoidBodyPose body, DynamicBuffer<HumanoidMuscleValue> muscles, DynamicBuffer<HumanoidRootMuscleValue> rootMuscles)
+                ref HumanoidBodyPose body, DynamicBuffer<HumanoidMuscleValue> muscles, DynamicBuffer<HumanoidRootMuscleValue> rootMuscles,
+                DynamicBuffer<HumanoidControllerMuscleHistory> history, DynamicBuffer<HumanoidControllerBodyHistory> bodyHistory)
             {
                 var nativeController = Controllers.HasComponent(entity) && Playback.HasComponent(entity) && Playback[entity].Value == PlaybackDriver.Controller;
                 if (nativeController
                     && Controllers[entity].Result == ControllerEvaluationResult.Success && Controllers[entity].RetainPose != 0
                     && (body.Result == HumanoidEvaluationResult.Success || body.Result == HumanoidEvaluationResult.RetainedPose))
                 { body.Result = HumanoidEvaluationResult.RetainedPose; return; }
+                if (nativeController && requests.Length > 0 && requests[0].MotionWeight > 0)
+                {
+                    HumanoidControllerBlend.Evaluate(rig, Controllers[entity].Definition, Step, requests, ref body, muscles, rootMuscles, history, bodyHistory);
+                    return;
+                }
                 body = new HumanoidBodyPose { Rotation = quaternion.identity, Result = HumanoidEvaluationResult.NoRequests };
                 muscles.ResizeUninitialized(95);
                 rootMuscles.Clear();

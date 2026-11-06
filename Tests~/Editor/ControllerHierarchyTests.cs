@@ -16,6 +16,7 @@ namespace AnimationSystemDOTS.Tests
         [TestCase("conditionalExit")]
         [TestCase("unmatchedExit")]
         [TestCase("rootExit")]
+        [TestCase("deepExit")]
         public void NestedMachines_StatesClocksAndPosesMatchNative(string scenario)
         {
             using (var oracle = new ControllerGraphOracle("hierarchy-" + scenario))
@@ -50,6 +51,13 @@ namespace AnimationSystemDOTS.Tests
                 {
                     var exit = b.AddExitTransition(); exit.hasExitTime = false; exit.hasFixedDuration = true; exit.duration = .25f;
                     exit.AddCondition(AnimatorConditionMode.If, 0, "Go"); root.AddStateMachineExitTransition(group);
+                }
+                if (scenario == "deepExit")
+                {
+                    var deep = group.AddStateMachine("Deep"); var d = oracle.State(deep, "D", 2); deep.defaultState = d;
+                    group.AddEntryTransition(deep).AddCondition(AnimatorConditionMode.If, 0, "Enabled");
+                    var exit = d.AddExitTransition(); exit.hasExitTime = true; exit.exitTime = .3f; exit.hasFixedDuration = true; exit.duration = .25f;
+                    group.AddStateMachineExitTransition(deep); root.AddStateMachineTransition(group, a);
                 }
                 if (scenario == "stateToMachine")
                 {

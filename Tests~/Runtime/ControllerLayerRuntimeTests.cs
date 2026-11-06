@@ -95,6 +95,7 @@ namespace AnimationSystemDOTS.Tests
             var state = em.GetComponentData<ControllerLayerState>(rigEntity); var clock = em.GetComponentData<AnimationClock>(rigEntity);
             using (var layerSnapshot = em.GetBuffer<ControllerLayerRuntime>(rigEntity).ToNativeArray(Allocator.Temp))
             using (var cacheSnapshot = em.GetBuffer<ControllerCachedRequest>(rigEntity).ToNativeArray(Allocator.Temp))
+            using (var poseHistorySnapshot = em.GetBuffer<ControllerBoneHistory>(rigEntity).ToNativeArray(Allocator.Temp))
             using (var parameterSnapshot = em.GetBuffer<AnimationParameterValue>(rigEntity).ToNativeArray(Allocator.Temp))
             {
                 var values = em.GetBuffer<AnimationParameterValue>(rigEntity); values[0] = default;
@@ -105,6 +106,7 @@ namespace AnimationSystemDOTS.Tests
                 em.SetComponentData(rigEntity, state); em.SetComponentData(rigEntity, clock);
                 em.GetBuffer<ControllerLayerRuntime>(rigEntity).CopyFrom(layerSnapshot);
                 em.GetBuffer<ControllerCachedRequest>(rigEntity).CopyFrom(cacheSnapshot);
+                em.GetBuffer<ControllerBoneHistory>(rigEntity).CopyFrom(poseHistorySnapshot);
                 em.GetBuffer<AnimationParameterValue>(rigEntity).CopyFrom(parameterSnapshot);
                 values = em.GetBuffer<AnimationParameterValue>(rigEntity); values[0] = default;
                 Tick(2, .2, 3, AnimationStepMode.Replay); sample.Update(); blend.Update(); em.CompleteAllTrackedJobs();

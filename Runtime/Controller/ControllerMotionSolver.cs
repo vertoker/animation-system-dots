@@ -133,6 +133,7 @@ namespace AnimationSystemDOTS
             root.PreviousTime = state.Speed < 0 ? 1 - previous - state.CycleOffset : previous + state.CycleOffset;
             root.Time = state.Speed < 0 ? 1 - time - state.CycleOffset : time + state.CycleOffset;
             root.Reversed = state.Speed < 0 ? (byte)1 : (byte)0; scratch[state.Motion] = root;
+            root.PhaseOffset = state.Speed < 0 ? -state.CycleOffset : state.CycleOffset; scratch[state.Motion] = root;
             for (var i = state.Motion; i >= 0; i--)
             {
                 var value = scratch[i]; if (value.Weight <= 0) continue;
@@ -140,7 +141,8 @@ namespace AnimationSystemDOTS
                 if (node.Type == ControllerMotionType.Clip)
                 {
                     var duration = library.Clips[node.Clip.Value].Duration;
-                    requests.Add(new AnimationClipRequest { Clip = node.Clip, PreviousTime = value.PreviousTime * duration, Time = value.Time * duration,
+                    var offset = library.Clips[node.Clip.Value].IsLooping != 0 ? 0 : value.PhaseOffset;
+                    requests.Add(new AnimationClipRequest { Clip = node.Clip, PreviousTime = (value.PreviousTime - offset) * duration, Time = (value.Time - offset) * duration,
                         Weight = value.Weight, InstanceSequence = sequence,
                         LoopBoundary = value.Reversed != 0 ? ClipLoopBoundary.End : ClipLoopBoundary.Start });
                     continue;
@@ -155,6 +157,7 @@ namespace AnimationSystemDOTS
                     child.PreviousTime = reverse ? 1 - value.PreviousTime - offset : value.PreviousTime + offset;
                     child.Time = reverse ? 1 - value.Time - offset : value.Time + offset;
                     child.Reversed = (byte)(value.Reversed ^ (reverse ? 1 : 0)); scratch[edge.Motion] = child;
+                    child.PhaseOffset = reverse ? -value.PhaseOffset - offset : value.PhaseOffset + offset; scratch[edge.Motion] = child;
                 }
             }
         }

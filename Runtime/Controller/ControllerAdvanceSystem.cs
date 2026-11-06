@@ -125,6 +125,7 @@ namespace AnimationSystemDOTS
                 if (state.Initialized == 0)
                 {
                     state.CurrentState = Entry(ref graph, layer, parameters); state.NextState = -1;
+                    state.ActiveTransition = -1; state.FrozenSource = 0;
                     state.NormalizedTime = 0; state.CurrentSequence = ++state.Sequence; state.Initialized = 1;
                 }
                 if (state.CurrentState < layer.StateStart || state.CurrentState >= layer.StateStart + layer.StateCount
@@ -133,37 +134,51 @@ namespace AnimationSystemDOTS
                 var previous = state.NormalizedTime; var nextPrevious = state.NextNormalizedTime;
                 ref var current = ref graph.States[state.CurrentState];
                 var currentDuration = Duration(ref graph, layerIndex, state.CurrentState, scratch, layers);
-                state.NormalizedTime = Advance(previous, dt, ref current, parameters, currentDuration);
+                if (state.FrozenSource == 0) state.NormalizedTime = Advance(previous, dt, ref current, parameters, currentDuration);
+                var edge = -1; var candidateSource = state.CurrentState; var remainingFraction = 0d;
+                var interrupted = state.NextState >= 0;
                 if (state.NextState >= 0)
                 {
                     state.NextNormalizedTime = Advance(nextPrevious, dt, ref graph.States[state.NextState], parameters,
                         Duration(ref graph, layerIndex, state.NextState, scratch, layers));
-                    var progressStep = dt * TransitionRate(state.NormalizedTransition, currentDuration, ref current, parameters);
-                    state.TransitionTime = math.min(state.TransitionDuration, state.TransitionTime + progressStep);
-                    if (state.TransitionTime >= state.TransitionDuration) Promote(ref state, ref previous, nextPrevious);
+                    edge = FindInterruption(ref graph, layer, ref state, previous, nextPrevious, parameters, out candidateSource, out remainingFraction);
+                    if (edge < 0)
+                    {
+                        // A captured interruption source has no advancing motion.
+                        // Native normalizes its duration using the new destination.
+                        var source = state.FrozenSource != 0 ? state.NextState : state.CurrentState;
+                        var sourceDuration = Duration(ref graph, layerIndex, source, scratch, layers);
+                        var progressStep = dt * TransitionRate(state.NormalizedTransition, sourceDuration, ref graph.States[source], parameters);
+                        state.TransitionTime = math.min(state.TransitionDuration, state.TransitionTime + progressStep);
+                        if (state.TransitionTime >= state.TransitionDuration) Promote(ref state, ref previous, nextPrevious);
+                    }
                 }
                 else
                 {
-                    var edge = FindAny(ref graph, layer, state.CurrentState, previous, state.NormalizedTime, parameters, out var remainingFraction);
+                    edge = FindAny(ref graph, layer, state.CurrentState, previous, state.NormalizedTime, parameters, out remainingFraction);
                     if (edge < 0) edge = Find(ref graph, current.TransitionStart, current.TransitionCount,
                         layer.RootMachine, state.CurrentState, previous, state.NormalizedTime, parameters, out remainingFraction);
-                    if (edge >= 0)
-                    {
+                }
+                if (edge >= 0)
+                {
                         ref var transition = ref graph.Transitions[edge]; Consume(ref graph, ref transition, parameters);
                         var target = graph.Machines.Length > 0 ? ControllerMachineRuntime.Destination(ref graph, ref transition, layer.RootMachine, parameters, true)
                             : transition.Destination < 0 ? Entry(ref graph, layer, parameters) : transition.Destination;
                         if ((uint)target >= (uint)graph.States.Length) { state.Result = ControllerEvaluationResult.InvalidDefinition; return; }
+                        state.FrozenSource = interrupted ? (byte)1 : (byte)0;
+                        state.ActiveTransition = edge;
                         state.NextState = target; state.NextSequence = ++state.Sequence;
                         nextPrevious = state.NextNormalizedTime = transition.Offset;
                         state.NormalizedTransition = transition.FixedDuration == 0 ? (byte)1 : (byte)0;
-                        state.TransitionDuration = transition.FixedDuration != 0 || currentDuration > 0 ? transition.Duration : 0;
+                        var timingSource = interrupted ? target : candidateSource;
+                        var sourceDuration = Duration(ref graph, layerIndex, timingSource, scratch, layers);
+                        state.TransitionDuration = transition.FixedDuration != 0 || sourceDuration > 0 ? transition.Duration : 0;
                         var remaining = dt * remainingFraction;
                         state.NextNormalizedTime = Advance(nextPrevious, remaining, ref graph.States[target], parameters,
                             Duration(ref graph, layerIndex, target, scratch, layers));
                         state.TransitionTime = math.min(state.TransitionDuration,
-                            remaining * TransitionRate(state.NormalizedTransition, currentDuration, ref current, parameters));
+                            remaining * TransitionRate(state.NormalizedTransition, sourceDuration, ref graph.States[timingSource], parameters));
                         if (state.TransitionDuration <= state.TransitionTime) Promote(ref state, ref previous, nextPrevious);
-                    }
                 }
                 Emit(ref graph, ref library, owner, ref state, layer, layerIndex, weight, parameters, scratch, previous, nextPrevious, cache, requests);
             }
@@ -190,27 +205,33 @@ namespace AnimationSystemDOTS
                 if (state.NextState >= 0)
                 {
                     var blend = state.TransitionDuration > 0 ? (float)(state.TransitionTime / state.TransitionDuration) : 1;
-                    Request(ref graph, ref library, ref graph.States[state.CurrentState], parameters, scratch, previous, state.NormalizedTime, 1 - blend, 0, state.CurrentSequence, requests);
-                    Request(ref graph, ref library, ref graph.States[state.NextState], parameters, scratch, nextPrevious, state.NextNormalizedTime, blend, 1, state.NextSequence, requests);
+                    if (state.FrozenSource != 0)
+                        requests.Add(new AnimationClipRequest { Clip = new ClipId(-1), PoseSource = ControllerPoseSource.Captured, StateSlot = 0,
+                            MotionWeight = 1, StateWeight = 1 - blend, Weight = 1 - blend, InstanceSequence = state.NextSequence });
+                    else Request(ref graph, ref library, ref graph.States[state.CurrentState], parameters, scratch, previous, state.NormalizedTime, 1 - blend, 0, state.CurrentSequence, true, requests);
+                    Request(ref graph, ref library, ref graph.States[state.NextState], parameters, scratch, nextPrevious, state.NextNormalizedTime, blend, 1, state.NextSequence, true, requests);
                 }
-                else Request(ref graph, ref library, ref graph.States[state.CurrentState], parameters, scratch, previous, state.NormalizedTime, 1, 0, state.CurrentSequence, requests);
+                else Request(ref graph, ref library, ref graph.States[state.CurrentState], parameters, scratch, previous, state.NormalizedTime, 1, 0, state.CurrentSequence, false, requests);
                 if (requests.Length == start)
                 {
-                    // A lone base layer retains the final pose directly, preserving
-                    // its established empty-request contract. With other layers we
-                    // must retain the independent layer stream while they advance.
+                    // A lone base layer retains its final pose. Other layers hold
+                    // their last evaluated raw stream; a never-evaluated empty
+                    // layer contributes nothing to the lower layers.
                     if (graph.Layers.Length > 1)
                         for (var i = 0; i < cache.Length; i++)
                             if (cache[i].Request.Layer == layerIndex)
-                            { var held = cache[i].Request; held.PreviousTime = held.Time; requests.Add(held); }
+                            {
+                                var held = cache[i].Request; held.PreviousTime = held.Time; held.Clip = new ClipId(-1);
+                                held.PoseSource = ControllerPoseSource.PreviousLayer; held.StateSlot = 0; held.StateWeight = held.MotionWeight = held.Weight = 1;
+                                requests.Add(held); break;
+                            }
                 }
-                else
+                else if (weight > 0)
                 {
                     for (var i = cache.Length - 1; i >= 0; i--) if (cache[i].Request.Layer == layerIndex) cache.RemoveAt(i);
                     for (var i = start; i < requests.Length; i++)
                     { var held = requests[i]; held.Layer = layerIndex; cache.Add(new ControllerCachedRequest { Request = held }); }
                 }
-                if (weight <= 0) { requests.ResizeUninitialized(start); return; }
                 for (var i = start; i < requests.Length; i++)
                 {
                     var request = requests[i]; request.Layer = layerIndex; request.BlendMode = layer.BlendMode; request.LayerWeight = weight; request.Weight *= weight;
@@ -231,10 +252,11 @@ namespace AnimationSystemDOTS
             {
                 state.CurrentState = state.NextState; state.NextState = -1; state.NormalizedTime = state.NextNormalizedTime;
                 state.CurrentSequence = state.NextSequence; previous = nextPrevious;
+                state.FrozenSource = 0; state.ActiveTransition = -1;
                 state.NextNormalizedTime = state.TransitionTime = state.TransitionDuration = 0;
             }
             static void Request(ref AnimatorControllerBlob graph, ref AnimationLibraryBlob library, ref ControllerStateDefinition source, DynamicBuffer<AnimationParameterValue> parameters, DynamicBuffer<ControllerMotionValue> scratch,
-                double previous, double time, float weight, byte slot, ulong sequence, DynamicBuffer<AnimationClipRequest> requests)
+                double previous, double time, float weight, byte slot, ulong sequence, bool fading, DynamicBuffer<AnimationClipRequest> requests)
             {
                 // Motion Time selects the sampled pose, not the state's clock or
                 // Exit Time gate. A cycle parameter replaces the authored offset.
@@ -245,10 +267,18 @@ namespace AnimationSystemDOTS
                 {
                     var start = requests.Length;
                     ControllerMotionSolver.Emit(ref graph, ref library, ref state, scratch, previous, time, 1, sequence, requests);
+                    if (requests.Length == start)
+                    {
+                        // Native's empty source stream defaults to rest during a
+                        // fade. An empty destination reads the prior layer pose.
+                        if (fading) requests.Add(new AnimationClipRequest { Clip = new ClipId(-1), PoseSource = slot == 0 ? ControllerPoseSource.Rest : ControllerPoseSource.PreviousLayer,
+                            Weight = 1, InstanceSequence = sequence });
+                    }
                     for (var i = start; i < requests.Length; i++)
                     { var item = requests[i]; item.MotionWeight = item.Weight; item.StateWeight = weight; item.StateSlot = slot; item.Weight *= weight; requests[i] = item; }
                     return;
                 }
+                if ((uint)state.Clip.Value < (uint)library.Clips.Length && library.Clips[state.Clip.Value].IsLooping == 0) state.CycleOffset = 0;
                 requests.Add(new AnimationClipRequest { Clip = state.Clip,
                     PreviousTime = (state.Speed < 0 ? 1 - previous - state.CycleOffset : previous + state.CycleOffset) * state.Duration,
                     Time = (state.Speed < 0 ? 1 - time - state.CycleOffset : time + state.CycleOffset) * state.Duration,
@@ -265,25 +295,60 @@ namespace AnimationSystemDOTS
                 }
                 return layer.DefaultState;
             }
-            static int FindAny(ref AnimatorControllerBlob graph, ControllerLayerDefinition layer, int current, double previous, double time,
-                DynamicBuffer<AnimationParameterValue> parameters, out double remainingFraction)
+            static int FindInterruption(ref AnimatorControllerBlob graph, ControllerLayerDefinition layer, ref ControllerLayerState state,
+                double previous, double nextPrevious, DynamicBuffer<AnimationParameterValue> parameters, out int source, out double remaining)
             {
-                if (graph.Machines.Length == 0) return Find(ref graph, layer.AnyStart, layer.AnyCount, layer.RootMachine, current, previous, time, parameters, out remainingFraction);
+                source = state.CurrentState; remaining = 0;
+                if ((uint)state.ActiveTransition >= (uint)graph.Transitions.Length) return -1;
+                ref var active = ref graph.Transitions[state.ActiveTransition];
+                if (active.Interruption == ControllerInterruptionSource.None) return -1;
+                source = state.CurrentState;
+                var sourceTime = state.NormalizedTime;
+                var sourcePrevious = state.FrozenSource != 0 ? sourceTime : previous;
+                var stop = active.OrderedInterruption != 0 ? state.ActiveTransition : -1;
+                var edge = FindAny(ref graph, layer, source, sourcePrevious, sourceTime, parameters, out remaining, stop);
+                if (edge >= 0) return edge;
+                if (Contains(layer.AnyStart, layer.AnyCount, stop)) return -1;
+                for (var m = 0; m < graph.Machines.Length; m++)
+                    if (Contains(graph.Machines[m].AnyStart, graph.Machines[m].AnyCount, stop)) return -1;
+                var destinationFirst = active.Interruption == ControllerInterruptionSource.Destination || active.Interruption == ControllerInterruptionSource.DestinationThenSource;
+                var both = active.Interruption == ControllerInterruptionSource.SourceThenDestination || active.Interruption == ControllerInterruptionSource.DestinationThenSource;
+                for (var pass = 0; pass < (both ? 2 : 1); pass++)
+                {
+                    var destination = pass == 0 ? destinationFirst : !destinationFirst;
+                    var candidate = destination ? state.NextState : source;
+                    ref var definition = ref graph.States[candidate];
+                    edge = Find(ref graph, definition.TransitionStart, definition.TransitionCount, layer.RootMachine, candidate,
+                        destination ? nextPrevious : sourcePrevious, destination ? state.NextNormalizedTime : sourceTime, parameters, out remaining, stop);
+                    if (edge >= 0) { source = candidate; return edge; }
+                    // Ordered interruption stops the whole candidate queue at the
+                    // active edge, including subsequent destination/source lists.
+                    if (Contains(definition.TransitionStart, definition.TransitionCount, stop)) return -1;
+                }
+                return -1;
+            }
+            static int FindAny(ref AnimatorControllerBlob graph, ControllerLayerDefinition layer, int current, double previous, double time,
+                DynamicBuffer<AnimationParameterValue> parameters, out double remainingFraction, int stop = -1)
+            {
+                if (graph.Machines.Length == 0) return Find(ref graph, layer.AnyStart, layer.AnyCount, layer.RootMachine, current, previous, time, parameters, out remainingFraction, stop);
                 for (var m = 0; m < graph.Machines.Length; m++)
                 {
                     if (!ControllerMachineRuntime.IsAncestor(ref graph, m, graph.States[current].Machine)) continue;
                     ref var machine = ref graph.Machines[m];
-                    var edge = Find(ref graph, machine.AnyStart, machine.AnyCount, layer.RootMachine, current, previous, time, parameters, out remainingFraction);
+                    var edge = Find(ref graph, machine.AnyStart, machine.AnyCount, layer.RootMachine, current, previous, time, parameters, out remainingFraction, stop);
                     if (edge >= 0) return edge;
+                    if (Contains(machine.AnyStart, machine.AnyCount, stop)) return -1;
                 }
                 remainingFraction = 0; return -1;
             }
+            static bool Contains(int start, int count, int index) => index >= start && index - start < count;
             static int Find(ref AnimatorControllerBlob graph, int start, int count, int root, int current, double previous, double time,
-                DynamicBuffer<AnimationParameterValue> parameters, out double remainingFraction)
+                DynamicBuffer<AnimationParameterValue> parameters, out double remainingFraction, int stop = -1)
             {
                 remainingFraction = 0;
                 for (var i = 0; i < count; i++)
                 {
+                    if (start + i == stop) break;
                     ref var edge = ref graph.Transitions[start + i];
                     if (!Matches(ref graph, ref edge, parameters)) continue;
                     var destination = graph.Machines.Length > 0 ? ControllerMachineRuntime.Destination(ref graph, ref edge, root, parameters, false) : edge.Destination;

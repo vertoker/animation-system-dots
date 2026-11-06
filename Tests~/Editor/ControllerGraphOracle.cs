@@ -46,7 +46,7 @@ namespace AnimationSystemDOTS.Tests
         AnimationBlendSystem blend;
         ulong tick;
 
-        internal ControllerGraphOracle(string name)
+        internal ControllerGraphOracle(string name, bool additiveReferences = false, bool looping = true)
         {
             reportName = name;
             Folder = "Assets/__GraphOracle_" + Guid.NewGuid().ToString("N"); AssetDatabase.CreateFolder("Assets", Path.GetFileName(Folder));
@@ -68,7 +68,9 @@ namespace AnimationSystemDOTS.Tests
                 for (var c = 1; c < 3; c++) clip.SetCurve("Bone", typeof(Transform), "m_LocalPosition." + "xyz"[c], AnimationCurve.Constant(0, lengths[i], 0));
                 for (var c = 0; c < 4; c++) clip.SetCurve("Bone", typeof(Transform), "m_LocalRotation." + "xyzw"[c], AnimationCurve.Constant(0, lengths[i], rotations[i][c]));
                 for (var c = 0; c < 3; c++) clip.SetCurve("Bone", typeof(Transform), "m_LocalScale." + "xyz"[c], AnimationCurve.Constant(0, lengths[i], 1 + i * .15f));
-                var clipSettings = AnimationUtility.GetAnimationClipSettings(clip); clipSettings.loopTime = true;
+                var clipSettings = AnimationUtility.GetAnimationClipSettings(clip); clipSettings.loopTime = looping;
+                if (additiveReferences)
+                { clipSettings.hasAdditiveReferencePose = true; clipSettings.additiveReferencePoseClip = i == 0 ? clip : Clips[0]; clipSettings.additiveReferencePoseTime = 0; }
                 AnimationUtility.SetAnimationClipSettings(clip, clipSettings); AssetDatabase.CreateAsset(clip, Folder + "/Motion" + i + ".anim"); Clips[i] = clip;
             }
             settings = ScriptableObject.CreateInstance<AnimationBakeSettings>(); settings.SampleRate = 240; settings.PositionTolerance = .0001f; settings.AngleToleranceDegrees = .05f;
@@ -92,6 +94,7 @@ namespace AnimationSystemDOTS.Tests
         {
             nativeGraph = PlayableGraph.Create("AnimationSystemDOTS Graph Oracle " + reportName); nativeGraph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
             Native = AnimatorControllerPlayable.Create(nativeGraph, Source);
+            for (var l = 1; l < Source.layers.Length; l++) Native.SetLayerWeight(l, Source.layers[l].defaultWeight);
             AnimationPlayableOutput.Create(nativeGraph, "Native", go.GetComponent<Animator>()).SetSourcePlayable(Native); nativeGraph.Play(); nativeGraph.Evaluate(0);
             Assert.That(Native.GetCurrentAnimatorStateInfo(0).fullPathHash, Is.Not.Zero, "Native fixture must have a valid active state before testing conversion.");
         }
@@ -121,6 +124,19 @@ namespace AnimationSystemDOTS.Tests
             if (World != null) Assert.That(AnimationApi.SetTrigger(new AnimationController { Definition = Definition }, World.EntityManager.GetBuffer<AnimationParameterValue>(Actor),
                 AnimationApi.FindParameter(new AnimationController { Definition = Definition }, name)), Is.EqualTo(AnimationParameterResult.Success));
         }
+        internal void LayerWeight(int layer, float value)
+        {
+            Native.SetLayerWeight(layer, value);
+            Assert.That(AnimationApi.SetLayerWeight(new AnimationController { Definition = Definition }, World.EntityManager.GetBuffer<ControllerLayerRuntime>(Actor), layer, value), Is.EqualTo(AnimationLayerResult.Success));
+        }
+        internal void RepeatEcs()
+        {
+            var expected = World.EntityManager.GetBuffer<BoneLocalPose>(Actor)[1];
+            advance.Update(); sample.Update(); blend.Update(); World.EntityManager.CompleteAllTrackedJobs();
+            var actual = World.EntityManager.GetBuffer<BoneLocalPose>(Actor)[1];
+            Assert.That(actual.Position, Is.EqualTo(expected.Position), reportName + " repeated pose");
+            Assert.That(actual.Rotation, Is.EqualTo(expected.Rotation), reportName + " repeated rotation");
+        }
         internal void Tick(float dt)
         {
             nativeGraph.Evaluate(dt); ++tick;
@@ -145,6 +161,25 @@ namespace AnimationSystemDOTS.Tests
             Assert.That(math.distance(actual.Position, bone.localPosition), Is.LessThanOrEqualTo(1e-4), context + " position");
             Assert.That(Quaternion.Angle(actual.Rotation, bone.localRotation), Is.LessThanOrEqualTo(.05f), context + " rotation");
             Assert.That(math.distance(actual.Scale, bone.localScale), Is.LessThanOrEqualTo(1e-4), context + " scale");
+            var layers = em.GetBuffer<ControllerLayerRuntime>(Actor);
+            for (var l = 1; l < layers.Length; l++)
+            {
+                var layer = layers[l].State; var native = Native.GetCurrentAnimatorStateInfo(l); var target = Native.GetNextAnimatorStateInfo(l);
+                var currentId = layer.CurrentState; var nextId = layer.NextState;
+                ref var layerDefinition = ref Definition.Value.Layers[l];
+                if (layerDefinition.SyncedLayer >= 0)
+                {
+                    var offset = Definition.Value.Layers[layerDefinition.SyncedLayer].StateStart - layerDefinition.StateStart;
+                    currentId += offset; if (nextId >= 0) nextId += offset;
+                }
+                Assert.That(Animator.StringToHash(Definition.Value.States[currentId].Path.ToString()), Is.EqualTo(native.fullPathHash), context + " layer=" + l);
+                Assert.That(layer.NormalizedTime, Is.EqualTo(native.normalizedTime).Within(2e-5), context + " layer clock=" + l);
+                Assert.That(layer.NextState >= 0, Is.EqualTo(Native.IsInTransition(l)), context + " layer fade=" + l);
+                if (layer.NextState < 0) continue;
+                Assert.That(Animator.StringToHash(Definition.Value.States[nextId].Path.ToString()), Is.EqualTo(target.fullPathHash), context + " layer next=" + l);
+                Assert.That(layer.NextNormalizedTime, Is.EqualTo(target.normalizedTime).Within(2e-5), context + " layer next clock=" + l);
+                Assert.That(layer.TransitionTime / layer.TransitionDuration, Is.EqualTo(Native.GetAnimatorTransitionInfo(l).normalizedTime).Within(2e-5), context + " layer progress=" + l);
+            }
         }
         internal void CaptureNative(float dt)
         {
@@ -153,7 +188,8 @@ namespace AnimationSystemDOTS.Tests
             var currentName = names.TryGetValue(current.shortNameHash, out var name) ? name : current.shortNameHash.ToString();
             var nextName = names.TryGetValue(next.shortNameHash, out name) ? name : "-";
             trace.AppendLine(tick + ";" + currentName + ";" + current.normalizedTime + ";" + nextName + ";" + next.normalizedTime
-                + ";" + Native.GetAnimatorTransitionInfo(0).normalizedTime + ";" + bone.localPosition.ToString("R") + ";" + bone.localRotation.ToString("R") + ";" + bone.localScale.ToString("R"));
+                + ";" + Native.GetAnimatorTransitionInfo(0).normalizedTime + ";" + bone.localPosition.ToString("R") + ";" + bone.localRotation.ToString("R") + ";" + bone.localScale.ToString("R")
+                + ";lengths=" + current.length + ";" + next.length + ";duration=" + Native.GetAnimatorTransitionInfo(0).duration + ";" + Native.GetAnimatorTransitionInfo(0).durationUnit);
             Assert.That(math.all(math.isfinite((float3)bone.localPosition)), Is.True);
             Assert.That(math.all(math.isfinite(((quaternion)bone.localRotation).value)), Is.True);
         }

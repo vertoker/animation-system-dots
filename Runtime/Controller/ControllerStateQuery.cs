@@ -16,6 +16,8 @@ namespace AnimationSystemDOTS
         public ControllerEvaluationResult Result;
         public byte RetainPose;
         public BlobAssetReference<AnimatorControllerBlob> Definition;
+        public int ActiveTransition;
+        public byte FrozenSource;
     }
     public struct ControllerStateSnapshot
     {

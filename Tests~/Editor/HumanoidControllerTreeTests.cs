@@ -30,7 +30,10 @@ namespace AnimationSystemDOTS.Tests
         [TestCase(false, 5)]
         [TestCase(false, 6)]
         [TestCase(false, 7)]
-        public void RealHumanoidController_TreePartialAndZeroWeightsMatchNative(bool direct, int layerMode = 0)
+        [TestCase(false, 0, 1)]
+        [TestCase(false, 0, 2)]
+        [TestCase(false, 1, 1)]
+        public void RealHumanoidController_TreePartialAndZeroWeightsMatchNative(bool direct, int layerMode = 0, int graphMode = 0)
         {
             var folder = "Assets/__HumanControllerTree_" + Guid.NewGuid().ToString("N");
             AssetDatabase.CreateFolder("Assets", Path.GetFileName(folder));
@@ -80,6 +83,20 @@ namespace AnimationSystemDOTS.Tests
                 var serialized = new SerializedObject(tree); serialized.FindProperty("m_NormalizedBlendValues").boolValue = true; serialized.ApplyModifiedPropertiesWithoutUndo();
                 var state = controller.layers[0].stateMachine.AddState("Human"); state.motion = layerMode > 0 ? (Motion)clips[0] : tree; state.writeDefaultValues = false;
                 controller.layers[0].stateMachine.defaultState = state;
+                if (graphMode > 0)
+                {
+                    foreach (var name in new[] { "Go", "Other", "Again" }) controller.AddParameter(name, AnimatorControllerParameterType.Trigger);
+                    var machine = controller.layers[0].stateMachine;
+                    var b = machine.AddState("WaveTarget"); b.motion = clips[1]; b.writeDefaultValues = false;
+                    var c = machine.AddState("RunTarget"); c.motion = clips[0]; c.writeDefaultValues = false;
+                    var first = ControllerGraphOracle.Edge(state, b, "Go", .8f);
+                    first.interruptionSource = graphMode == 1 ? TransitionInterruptionSource.Source : TransitionInterruptionSource.Destination;
+                    first.orderedInterruption = false;
+                    var second = ControllerGraphOracle.Edge(graphMode == 1 ? state : b, c, "Other", .7f);
+                    second.interruptionSource = graphMode == 1 ? TransitionInterruptionSource.Source : TransitionInterruptionSource.Destination;
+                    second.orderedInterruption = false;
+                    ControllerGraphOracle.Edge(graphMode == 1 ? state : c, b, "Again", .6f);
+                }
                 if (layerMode > 0)
                 {
                     controller.AddLayer("Upper"); var layers = controller.layers; var upper = layers[1]; upper.defaultWeight = .35f;
@@ -131,7 +148,7 @@ namespace AnimationSystemDOTS.Tests
                     typeof(PreciseHumanoidPose), typeof(HumanoidRigBinding), typeof(HumanoidBodyPose));
                 em.SetComponentData(actor, new AnimationRig { Rig = rig, Library = library }); em.SetComponentData(actor, new AnimationController { Definition = controllerBlob });
                 em.SetComponentData(actor, new AnimationPlaybackMode { Value = PlaybackDriver.Controller }); em.SetComponentData(actor, new HumanoidRigBinding { Avatar = animator.avatar });
-                em.AddBuffer<AnimationParameterValue>(actor).ResizeUninitialized(2); em.AddBuffer<AnimationClipRequest>(actor);
+                em.AddBuffer<AnimationParameterValue>(actor).Resize(controllerBlob.Value.Parameters.Length, NativeArrayOptions.ClearMemory); em.AddBuffer<AnimationClipRequest>(actor);
                 em.AddBuffer<HumanoidMuscleValue>(actor); em.AddBuffer<HumanoidRootMuscleValue>(actor); em.AddBuffer<BoneLocalPose>(actor); em.AddBuffer<BoneModelPose>(actor);
                 var advance = world.GetOrCreateSystemManaged<ControllerAdvanceSystem>(); var blend = world.GetOrCreateSystemManaged<HumanoidBlendSystem>();
                 var retarget = world.GetOrCreateSystemManaged<HumanoidRetargetSystem>(); var model = world.GetOrCreateSystemManaged<ModelPoseSystem>();
@@ -143,6 +160,12 @@ namespace AnimationSystemDOTS.Tests
                     var input = inputs[tick / 10]; var parameters = em.GetBuffer<AnimationParameterValue>(actor);
                     parameters[0] = new AnimationParameterValue { Float = input.x }; parameters[1] = new AnimationParameterValue { Float = input.y };
                     playable.SetFloat("A", input.x); playable.SetFloat("B", input.y);
+                    if (graphMode > 0 && (tick == 2 || tick == 6 || tick == 9))
+                    {
+                        var trigger = tick == 2 ? "Go" : tick == 6 ? "Other" : "Again"; playable.SetTrigger(trigger);
+                        var definition = new AnimationController { Definition = controllerBlob };
+                        AnimationApi.SetTrigger(definition, parameters, AnimationApi.FindParameter(definition, trigger));
+                    }
                     var dt = tick == 0 ? 0 : .037f; native.Evaluate(dt);
                     em.SetComponentData(step, new AnimationStepContext { Tick = (ulong)tick + 1, DeltaTime = dt });
                     advance.Update(); blend.Update(); retarget.Update(); model.Update(); em.CompleteAllTrackedJobs();
@@ -156,9 +179,9 @@ namespace AnimationSystemDOTS.Tests
                         maxRotation = math.max(maxRotation, Quaternion.Angle(local[b].Rotation, transforms[b].localRotation));
                     }
                 }
-                var report = "Human controller " + (direct ? "Direct" : "1D") + " layerMode=" + layerMode + " max=" + maxPosition + "m/" + maxRotation + "deg " + worst;
+                var report = "Human controller " + (direct ? "Direct" : "1D") + " layerMode=" + layerMode + " graphMode=" + graphMode + " max=" + maxPosition + "m/" + maxRotation + "deg " + worst;
                 Directory.CreateDirectory("Artifacts/Verification/AnimatorValidation");
-                File.WriteAllText("Artifacts/Verification/AnimatorValidation/HumanController-" + direct + "-" + layerMode + ".txt", report); Debug.Log(report);
+                File.WriteAllText("Artifacts/Verification/AnimatorValidation/HumanController-" + direct + "-" + layerMode + "-" + graphMode + ".txt", report); Debug.Log(report);
                 Assert.That(maxPosition, Is.LessThanOrEqualTo(.02f), worst);
                 Assert.That(maxRotation, Is.LessThanOrEqualTo(2));
             }

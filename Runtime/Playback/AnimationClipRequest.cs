@@ -2,6 +2,7 @@ using Unity.Entities;
 
 namespace AnimationSystemDOTS
 {
+    public enum ControllerPoseSource : byte { Motion, Captured, PreviousLayer, Rest }
     public enum PoseBlendMode : byte { Override, Additive }
     public enum ClipLoopBoundary : byte { AuthoredEndpoint, Start, End }
     public struct AnimationClipRequest : IBufferElementData
@@ -24,5 +25,6 @@ namespace AnimationSystemDOTS
         // each state's influence separately from its leaf motion weights.
         public float StateWeight, MotionWeight;
         public byte StateSlot;
+        public ControllerPoseSource PoseSource;
     }
 }
