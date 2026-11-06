@@ -79,10 +79,19 @@ namespace AnimationSystemDOTS.Editor.Baking
                         return cached;
                     }
                     var frames = new BoneLocalPose[count][];
+                    var preciseHuman = request.Clip.isHumanMotion && settings.HumanoidPoseMode == HumanoidPoseMode.PreciseMuscles;
+                    var humanFrames = preciseHuman ? new float[count][] : null;
+                    var bodyFrames = preciseHuman ? new BoneLocalPose[count] : null;
                     for (var frame = 0; frame < count; frame++)
                     {
                         request.Cancellation.ThrowIfCancellationRequested();
-                        frames[frame] = sampler.Sample(count == 1 ? 0 : duration * frame / (count - 1));
+                        var time = count == 1 ? 0 : duration * frame / (count - 1);
+                        frames[frame] = sampler.Sample(time);
+                        if (preciseHuman)
+                        {
+                            humanFrames[frame] = new float[HumanTrait.MuscleCount];
+                            bodyFrames[frame] = ((HumanoidClipSampler)sampler).ReadHumanPose(time, humanFrames[frame]);
+                        }
                     }
                     builder = new BlobBuilder(Allocator.Temp); ownsBuilder = true;
                     ref var data = ref builder.ConstructRoot<AnimationClipBlob>();
@@ -91,6 +100,19 @@ namespace AnimationSystemDOTS.Editor.Baking
                     data.RigKey = request.Rig.Value.ContentKey;
                     data.Duration = duration; data.SampleStep = step; data.SampleCount = count;
                     data.IsLooping = sampler.IsLooping ? (byte)1 : (byte)0;
+                    if (preciseHuman)
+                    {
+                        var muscles = builder.Allocate(ref data.HumanMuscles, HumanTrait.MuscleCount);
+                        for (var m = 0; m < muscles.Length; m++)
+                        {
+                            var constant = true;
+                            for (var frame = 1; frame < count; frame++) if (humanFrames[frame][m] != humanFrames[0][m]) { constant = false; break; }
+                            var values = builder.Allocate(ref muscles[m].Samples, constant ? 1 : count);
+                            for (var frame = 0; frame < values.Length; frame++) values[frame] = humanFrames[frame][m];
+                        }
+                        var bodies = builder.Allocate(ref data.HumanBody, count);
+                        for (var frame = 0; frame < count; frame++) bodies[frame] = bodyFrames[frame];
+                    }
                     var tracks = builder.Allocate(ref data.Tracks, frames[0].Length);
                     var reference = builder.Allocate(ref data.ReferencePose, frames[0].Length);
                     for (var bone = 0; bone < tracks.Length; bone++)

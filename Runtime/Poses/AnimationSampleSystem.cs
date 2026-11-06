@@ -11,6 +11,7 @@ namespace AnimationSystemDOTS
         protected override void OnUpdate() => Dependency = new SampleJob().ScheduleParallel(Dependency);
 
         [BurstCompile]
+        [WithNone(typeof(PreciseHumanoidPose))]
         partial struct SampleJob : IJobEntity
         {
             void Execute(in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests, DynamicBuffer<SampledBonePose> samples)

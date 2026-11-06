@@ -1,0 +1,134 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using AnimationSystemDOTS.Editor.Baking;
+using NUnit.Framework;
+using Unity.Collections;
+using UnityEditor;
+using UnityEngine;
+
+namespace AnimationSystemDOTS.Tests
+{
+    public class HumanoidCalibrationProbeTests
+    {
+        [Test, Explicit("Characterize the body orientation correction; not a runtime feature test.")]
+        public void NativeAvatar_BodyOrientationGeometry()
+        {
+            var source = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AnimationSystemDOTS.Sandbox/Humanoid/Model/BaldMale.fbx");
+            var rig = RigBakePipeline.Bake(source); Assert.That(rig.Success, Is.True);
+            try
+            {
+                var count = rig.Rig.Value.Paths.Length;
+                var paths = Enumerable.Range(0, count).Select(i => rig.Rig.Value.Paths[i].ToString()).ToArray();
+                var indices = new[] { "pelvis", "thigh_l", "thigh_r", "upperarm_l", "upperarm_r", "spine_03", "spine_02", "spine_01" }
+                    .Select(name => Array.FindIndex(paths, p => p.EndsWith("/" + name))).ToArray();
+                using (var handler = new HumanPoseHandler(source.GetComponent<Animator>().avatar, paths))
+                {
+                    var pose = new NativeArray<float>(count * 7, Allocator.Temp);
+                    try
+                    {
+                        for (var i = 0; i < count; i++)
+                        {
+                            var rest = rig.Rig.Value.RestLocalPoses[i]; var j = i * 7;
+                            pose[j] = rest.Position.x; pose[j + 1] = rest.Position.y; pose[j + 2] = rest.Position.z;
+                            pose[j + 3] = rest.Rotation.value.x; pose[j + 4] = rest.Rotation.value.y; pose[j + 5] = rest.Rotation.value.z; pose[j + 6] = rest.Rotation.value.w;
+                        }
+                        handler.SetInternalAvatarPose(pose);
+                        var human = new HumanPose { bodyPosition = Vector3.up, bodyRotation = Quaternion.identity, muscles = new float[HumanTrait.MuscleCount] };
+                        const int variants = 5 * 21 * 5;
+                        var random = new System.Random(1741); var max = new float[variants]; var average = new float[variants]; var correction = new Quaternion[variants];
+                        for (var sample = 0; sample <= 1000; sample++)
+                        {
+                            foreach (var m in new[] {0,1,2,3,4,5,6,7,8,37,38,46,47}) human.muscles[m] = sample == 0 ? 0 : (float)(random.NextDouble() * 1.6 - .8);
+                            handler.SetInternalHumanPose(ref human); handler.GetInternalAvatarPose(pose);
+                            var matrices = new Matrix4x4[count];
+                            for (var b = 0; b < count; b++)
+                            {
+                                var j = b * 7; var parent = rig.Rig.Value.Parents[b];
+                                var local = Matrix4x4.TRS(new Vector3(pose[j], pose[j + 1], pose[j + 2]), new Quaternion(pose[j + 3], pose[j + 4], pose[j + 5], pose[j + 6]), rig.Rig.Value.RestLocalPoses[b].Scale);
+                                matrices[b] = parent < 0 ? local : matrices[parent] * local;
+                            }
+                            var hip = matrices[indices[0]]; Vector3 hipPos = hip.GetColumn(3);
+                            Vector3 leftHip = matrices[indices[1]].GetColumn(3), rightHip = matrices[indices[2]].GetColumn(3);
+                            Vector3 leftArm = matrices[indices[3]].GetColumn(3), rightArm = matrices[indices[4]].GetColumn(3);
+                            var lowerRight = rightHip - leftHip; var upperRight = rightArm - leftArm;
+                            for (var origin = 0; origin < 5; origin++) for (var weight = 0; weight < 21; weight++) for (var ortho = 0; ortho < 5; ortho++)
+                            {
+                                var index = (origin * 21 + weight) * 5 + ortho;
+                                var up = ((leftArm + rightArm) * .5f - Vector3.Lerp(hipPos, (leftHip + rightHip) * .5f, origin * .25f)).normalized;
+                                var right = (lowerRight * (weight * .05f) + upperRight).normalized;
+                                var forward = Vector3.Cross(right, up).normalized;
+                                var correctedRight = Vector3.Lerp(right, Vector3.Cross(up, forward), ortho * .25f).normalized;
+                                var q = Quaternion.LookRotation(forward, Vector3.Cross(forward, correctedRight));
+                                if (sample == 0) correction[index] = Quaternion.Inverse(q);
+                                var error = Quaternion.Angle(Quaternion.identity, q * correction[index]);
+                                max[index] = Mathf.Max(max[index], error); average[index] += error;
+                            }
+                        }
+                        var lines = Enumerable.Range(0, max.Length).OrderBy(i => max[i]).Take(20)
+                            .Select(i => "origin=" + i / 105 * .25f + " hipRightWeight=" + i / 5 % 21 * .05f + " ortho=" + i % 5 * .25f + " max=" + max[i] + " mean=" + average[i] / 1000).ToArray();
+                        var root = Path.GetFullPath("Artifacts/Verification/AnimatorValidation"); Directory.CreateDirectory(root);
+                        File.WriteAllLines(Path.Combine(root, "BodyOrientationGeometry.txt"), lines); TestContext.WriteLine(string.Join("\n", lines));
+                    }
+                    finally { pose.Dispose(); }
+                }
+            }
+            finally { rig.Rig.Dispose(); }
+        }
+
+        [Test, Explicit("Investigate the muscle-to-local-pose mapping before choosing a Burst calibration representation.")]
+        public void NativeAvatar_ReportsMuscleInfluenceOnEachTargetJoint()
+        {
+            var source = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AnimationSystemDOTS.Sandbox/Humanoid/Model/BaldMale.fbx");
+            var rig = RigBakePipeline.Bake(source);
+            Assert.That(rig.Success, Is.True);
+            var count = rig.Rig.Value.Paths.Length;
+            try
+            {
+                var paths = Enumerable.Range(0, count).Select(i => rig.Rig.Value.Paths[i].ToString()).ToArray();
+                using (var handler = new HumanPoseHandler(source.GetComponent<Animator>().avatar, paths))
+                {
+                    var pose = new NativeArray<float>(count * 7, Allocator.Temp);
+                    try
+                    {
+                    for (var i = 0; i < count; i++)
+                    {
+                        var rest = rig.Rig.Value.RestLocalPoses[i]; var j = i * 7;
+                        pose[j] = rest.Position.x; pose[j + 1] = rest.Position.y; pose[j + 2] = rest.Position.z;
+                        pose[j + 3] = rest.Rotation.value.x; pose[j + 4] = rest.Rotation.value.y; pose[j + 5] = rest.Rotation.value.z; pose[j + 6] = rest.Rotation.value.w;
+                    }
+                    handler.SetInternalAvatarPose(pose);
+                    var human = new HumanPose { bodyPosition = Vector3.up, bodyRotation = Quaternion.identity, muscles = new float[HumanTrait.MuscleCount] };
+                    handler.SetInternalHumanPose(ref human); handler.GetInternalAvatarPose(pose);
+                    var basis = pose.ToArray();
+                    var influenced = Enumerable.Range(0, count).Select(i => new List<string>()).ToArray();
+                    var translations = new List<string>();
+                    for (var m = 0; m < HumanTrait.MuscleCount; m++)
+                    {
+                        human.muscles[m] = .5f; handler.SetInternalHumanPose(ref human); handler.GetInternalAvatarPose(pose);
+                        for (var b = 1; b < count; b++)
+                        {
+                            var j = b * 7;
+                            var a = new Quaternion(basis[j + 3], basis[j + 4], basis[j + 5], basis[j + 6]);
+                            var q = new Quaternion(pose[j + 3], pose[j + 4], pose[j + 5], pose[j + 6]);
+                            if (Quaternion.Angle(a, q) > .02f) influenced[b].Add(m + ":" + HumanTrait.MuscleName[m]);
+                            var distance = Vector3.Distance(new Vector3(basis[j], basis[j + 1], basis[j + 2]), new Vector3(pose[j], pose[j + 1], pose[j + 2]));
+                            if (distance > .00001f) translations.Add(paths[b] + " <- " + HumanTrait.MuscleName[m] + " " + distance);
+                        }
+                        human.muscles[m] = 0;
+                    }
+                    var lines = new List<string>();
+                    for (var b = 1; b < count; b++) if (influenced[b].Count > 0) lines.Add(paths[b] + " (" + influenced[b].Count + ") <- " + string.Join(",", influenced[b]));
+                    lines.Add("TRANSLATIONS"); lines.AddRange(translations);
+                    var reportRoot = Path.GetFullPath("Artifacts/Verification/AnimatorValidation"); Directory.CreateDirectory(reportRoot);
+                    File.WriteAllLines(Path.Combine(reportRoot, "MuscleInfluences.txt"), lines);
+                    TestContext.WriteLine(string.Join("\n", lines.Where(l => l.Contains("pelvis (") || l.Contains("spine_01 (") || l.Contains("upperarm_l (") || l.Contains("thigh_l (") || l.Contains("calf_l ("))));
+                    }
+                    finally { pose.Dispose(); }
+                }
+            }
+            finally { rig.Rig.Dispose(); }
+        }
+    }
+}

@@ -3,6 +3,7 @@
   "rootNamespace": "AnimationSystemDOTS.Editor",
   "references": [
     "AnimationSystemDOTS.Core",
+    "AnimationSystemDOTS.Humanoid",
     "AnimationSystemDOTS.Authoring",
     "AnimationSystemDOTS.Rendering",
     "Unity.Entities",

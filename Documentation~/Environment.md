@@ -23,6 +23,8 @@ Unity CLI/Pipeline is stopped for this project at the user's request. Autostart,
 
 Confirmed public APIs: `AnimationClipPlayable.Create(PlayableGraph, AnimationClip)`, `AnimatorControllerPlayable.Create(PlayableGraph, RuntimeAnimatorController)`, `PlayableGraph.Evaluate(float)`, `EditorSceneManager.NewPreviewScene()`.
 
-Live Editor verification uses the exact MCP instance `AnimationSystemDOTS@afa625f3a3564093`. Never run a second batch Editor against the open project. Package tests are explicitly listed in the project manifest's `testables`. A run with zero discovered tests is a failed verification.
+Live Editor verification uses the development host `DevProject~`, exact MCP instance `DevProject~@33d9498bf26c9d1a`. Never run a second Editor against that open project. Package tests are explicitly listed in the project manifest's `testables`. A run with zero discovered tests is a failed verification.
+
+After the blob schema 1→2 layout change on 2026-11-06, hot-reloaded native/type state rejected otherwise valid data until the development Editor was restarted. A clean script compilation alone did not resolve it. Both affected regression tests then passed unchanged, followed by 107/107 Editor+Sandbox and 45/45 Runtime tests. Reopen the development Editor after a blob layout migration before interpreting a hot-session failure as an algorithm regression.
 
 Windows/D3D12 is the development environment. No graphics correctness, Linux, Vulkan, Metal, performance or player-build claims have been verified yet.

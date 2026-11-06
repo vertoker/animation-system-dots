@@ -9,6 +9,11 @@ namespace AnimationSystemDOTS
         public BlobArray<BoneLocalPose> Samples;
     }
 
+    public struct ScalarTrack
+    {
+        public BlobArray<float> Samples;
+    }
+
     public struct AnimationClipBlob
     {
         public int Version;
@@ -20,5 +25,11 @@ namespace AnimationSystemDOTS
         public byte IsLooping;
         public BlobArray<BoneTrack> Tracks;
         public BlobArray<BoneLocalPose> ReferencePose;
+        // Empty for Generic and the legacy target-TRS Humanoid mode.
+        // Body is normalized center-of-mass TR; muscle values remain in source
+        // muscle space until after blending. They must not be reconstructed
+        // from an already retargeted skeleton.
+        public BlobArray<ScalarTrack> HumanMuscles;
+        public BlobArray<BoneLocalPose> HumanBody;
     }
 }

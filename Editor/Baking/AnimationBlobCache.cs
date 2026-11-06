@@ -176,6 +176,10 @@ namespace AnimationSystemDOTS.Editor.Baking
             if (blob.Duration > 0 && (blob.SampleCount < 2 || blob.SampleStep <= 0)) return false;
             for (var bone = 0; bone < blob.Tracks.Length; bone++)
                 if (blob.Tracks[bone].Samples.Length != 1 && blob.Tracks[bone].Samples.Length != blob.SampleCount) return false;
+            if (blob.HumanMuscles.Length == 0) return blob.HumanBody.Length == 0;
+            if (blob.HumanMuscles.Length != 95 || blob.HumanBody.Length != blob.SampleCount) return false;
+            for (var m = 0; m < blob.HumanMuscles.Length; m++)
+                if (blob.HumanMuscles[m].Samples.Length != 1 && blob.HumanMuscles[m].Samples.Length != blob.SampleCount) return false;
             return true;
         }
     }

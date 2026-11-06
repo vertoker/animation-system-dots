@@ -40,6 +40,8 @@ Interfaces: `AnimatorValidationAssets.ImportSources()` imports deterministically
 
 ## Task 2 — real Humanoid blend accuracy gate
 
+Execution amendment (2026-11-06, after user selected exact Humanoid first): raw muscle blending plus public unbound `HumanPoseHandler` reproduces the native oracle. Add an opt-in `PreciseMuscles` bake/runtime path with an ECS-native data model and a separate `AnimationSystemDOTS.Humanoid` adapter assembly. The native retarget call is managed/main-thread, with no runtime GameObject/Animator/PlayableGraph; measured isolated 1000-target retarget cost 4.09 ms median / 4.70 ms p95, not a scene benchmark. Preserve the existing Burst target-TRS path for old samples. Do not ship a learned approximation of Unity's body-orientation correction as an exact replacement. Measure the complete ECS path before any performance claims.
+
 Files: create `Samples~/Sandbox/Tests/Editor/HumanoidBlendParityTests.cs`, editor oracle helper and generated reports under `DevProject~/Artifacts/Verification/AnimatorValidation/`.
 
 Interfaces: capture target-local and model-space poses at explicit clip times and graph weights using native manual PlayableGraph in a preview scene; compare with the existing baked-TRS sampler/blender, dispose graphs/scenes/blobs in finally.

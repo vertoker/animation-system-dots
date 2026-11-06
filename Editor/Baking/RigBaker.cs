@@ -42,6 +42,11 @@ namespace AnimationSystemDOTS.Editor.Baking
                     DependsOn(controllerAuthoring.Controller);
                     foreach (var clip in controllerAuthoring.Controller.animationClips) if (!inputs.Contains(clip)) inputs.Add(clip);
                 }
+                var preciseHumanoid = authoring.Settings.HumanoidPoseMode == HumanoidPoseMode.PreciseMuscles && animator != null
+                    && animator.avatar != null && animator.avatar.isHuman;
+                if (preciseHumanoid)
+                    foreach (var input in inputs)
+                        if (input != null && !input.isHumanMotion) throw new ArgumentException("Precise Humanoid playback requires Humanoid clips; Generic transform motions cannot be mixed into this library.");
                 foreach (var input in inputs)
                 {
                     DependsOn(input);
@@ -97,6 +102,13 @@ namespace AnimationSystemDOTS.Editor.Baking
                         var definition = controller.Value.Parameters[p];
                         parameters.Add(new AnimationParameterValue { Float = definition.DefaultFloat, Int = definition.DefaultInt });
                     }
+                }
+                if (preciseHumanoid)
+                {
+                    AddComponent(entity, new PreciseHumanoidPose());
+                    AddComponent(entity, new Humanoid.HumanoidRigBinding { Avatar = animator.avatar });
+                    AddComponent(entity, new Humanoid.HumanoidBodyPose());
+                    AddBuffer<Humanoid.HumanoidMuscleValue>(entity);
                 }
                 AddComponent(entity, ClipPlaybackState.Initial);
                 AddBuffer<ScriptedPlaybackCommand>(entity);

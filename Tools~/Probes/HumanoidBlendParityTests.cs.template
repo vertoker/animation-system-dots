@@ -1,0 +1,181 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using AnimationSystemDOTS.Authoring;
+using AnimationSystemDOTS.Editor.Baking;
+using NUnit.Framework;
+using Unity.Collections;
+using Unity.Entities;
+using Unity.Mathematics;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.Animations;
+using UnityEngine.Playables;
+
+namespace AnimationSystemDOTS.Tests
+{
+    // This is deliberately a native-vs-baked representation test, independent
+    // of the controller solver. A graph cannot fix a pose representation error.
+    public class HumanoidBlendParityTests
+    {
+        const string Root = "Assets/AnimationSystemDOTS.Sandbox/Humanoid/";
+
+        [Test]
+        public void SingleMixamoClip_MatchesNativeTargetPose()
+            => RealMixamoBlend_RetargetedTRSMatchesNativeMuscleBlend(1, false);
+
+        [Explicit("Architecture investigation: current TRS blend and HumanPose round-trip do not reproduce native Humanoid blending. See Animator validation reports; this is not supported runtime behavior.")]
+        [TestCase(1, false)]
+        [TestCase(2, false)]
+        [TestCase(3, false)]
+        [TestCase(1, true)]
+        [TestCase(2, true)]
+        [TestCase(3, true)]
+        [TestCase(1, true, true)]
+        [TestCase(2, true, true)]
+        [TestCase(3, true, true)]
+        public void RealMixamoBlend_RetargetedTRSMatchesNativeMuscleBlend(int inputCount, bool muscleSpace, bool authoredMuscles = false)
+        {
+            var scene = EditorSceneManager.NewPreviewScene();
+            var graph = default(PlayableGraph);
+            var rig = default(BlobAssetReference<RigDefinitionBlob>);
+            var baked = new List<BlobAssetReference<AnimationClipBlob>>();
+            var source = default(GameObject);
+            HumanPoseHandler reader = null, solver = null;
+            var avatarPose = default(NativeArray<float>);
+            var settings = ScriptableObject.CreateInstance<AnimationBakeSettings>();
+            settings.SampleRate = 960; settings.PositionTolerance = .002f; settings.AngleToleranceDegrees = .25f;
+            try
+            {
+                source = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(Root + "Model/BaldMale.fbx"), new InstantiateParameters { scene = scene });
+                var result = RigBakePipeline.Bake(source);
+                Assert.That(result.Success, Is.True, string.Join("\n", result.Diagnostics)); rig = result.Rig;
+                var clips = new[] { Find("Y_Bot_Idle_"), Find("Y_Bot_Running_"), Find("Y_Bot_Waving_") }.Take(inputCount).ToArray();
+                foreach (var clip in clips)
+                {
+                    var sample = ClipBakePipeline.Bake(new ClipBakeRequest { Source = source, Clip = clip, Rig = rig, Settings = settings });
+                    Assert.That(sample.Success, Is.True, string.Join("\n", sample.Diagnostics)); baked.Add(sample.Clip);
+                }
+                var transforms = Enumerable.Range(0, rig.Value.Paths.Length)
+                    .Select(i => i == 0 ? source.transform : source.transform.Find(rig.Value.Paths[i].ToString())).ToArray();
+                var rest = transforms.Select(t => new BoneLocalPose { Position = t.localPosition, Rotation = t.localRotation, Scale = t.localScale }).ToArray();
+                var animator = source.GetComponent<Animator>(); animator.runtimeAnimatorController = null;
+                reader = new HumanPoseHandler(animator.avatar, source.transform);
+                solver = new HumanPoseHandler(animator.avatar, Enumerable.Range(0, rig.Value.Paths.Length).Select(i => rig.Value.Paths[i].ToString()).ToArray());
+                avatarPose = new NativeArray<float>(transforms.Length * 7, Allocator.Persistent);
+                for (var i = 0; i < rest.Length; i++)
+                {
+                    var p = rest[i]; var j = i * 7;
+                    avatarPose[j] = p.Position.x; avatarPose[j + 1] = p.Position.y; avatarPose[j + 2] = p.Position.z;
+                    avatarPose[j + 3] = p.Rotation.value.x; avatarPose[j + 4] = p.Rotation.value.y; avatarPose[j + 5] = p.Rotation.value.z; avatarPose[j + 6] = p.Rotation.value.w;
+                }
+                solver.SetInternalAvatarPose(avatarPose);
+                animator.cullingMode = AnimatorCullingMode.AlwaysAnimate; animator.applyRootMotion = false; animator.fireEvents = false;
+                graph = PlayableGraph.Create("AnimationSystemDOTS Mixamo Blend Parity"); graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
+                var mixer = AnimationMixerPlayable.Create(graph, inputCount, true);
+                var playables = new AnimationClipPlayable[inputCount];
+                for (var i = 0; i < inputCount; i++)
+                {
+                    playables[i] = AnimationClipPlayable.Create(graph, clips[i]);
+                    playables[i].SetApplyFootIK(false); playables[i].SetApplyPlayableIK(false);
+                    graph.Connect(playables[i], 0, mixer, i);
+                }
+                AnimationPlayableOutput.Create(graph, "Native pose", animator).SetSourcePlayable(mixer); graph.Play();
+                float maxPosition = 0, maxAngle = 0; string positionBone = "", angleBone = "";
+                foreach (var phase in new[] { .07, .23, .47, .71, .93 })
+                foreach (var blend in new[] { .2f, .5f, .8f })
+                {
+                    var weights = inputCount == 1 ? new[] { 1f } : inputCount == 2 ? new[] { 1 - blend, blend } : new[] { (1 - blend) * .6f, (1 - blend) * .4f, blend };
+                    for (var bone = 0; bone < transforms.Length; bone++)
+                    { transforms[bone].localPosition = rest[bone].Position; transforms[bone].localRotation = rest[bone].Rotation; transforms[bone].localScale = rest[bone].Scale; }
+                    for (var i = 0; i < inputCount; i++)
+                    { playables[i].SetTime(phase * clips[i].length); playables[i].SetDone(false); mixer.SetInputWeight(i, weights[i]); }
+                    graph.Evaluate(0);
+                    var nativePositions = transforms.Select(t => source.transform.InverseTransformPoint(t.position)).ToArray();
+                    var nativeRotations = transforms.Select(t => t.localRotation).ToArray();
+                    if (muscleSpace)
+                    {
+                        var mixed = new HumanPose { muscles = new float[HumanTrait.MuscleCount], bodyRotation = Quaternion.identity };
+                        var total = 0f;
+                        for (var i = 0; i < inputCount; i++)
+                        {
+                            for (var c = 0; c < inputCount; c++) mixer.SetInputWeight(c, c == i ? 1 : 0);
+                            graph.Evaluate(0);
+                            var pose = new HumanPose(); reader.GetHumanPose(ref pose);
+                            if (authoredMuscles)
+                            {
+                                var curves = AnimationUtility.GetCurveBindings(clips[i]).ToDictionary(b => b.propertyName, b => AnimationUtility.GetEditorCurve(clips[i], b));
+                                for (var m = 0; m < pose.muscles.Length; m++)
+                                {
+                                    var name = HumanTrait.MuscleName[m];
+                                    var parts = name.Split(' ');
+                                    if (parts.Length >= 3 && m >= 55) name = parts[0] + "Hand." + parts[1] + "." + string.Join(" ", parts.Skip(2));
+                                    pose.muscles[m] = curves.TryGetValue(name, out var curve) ? curve.Evaluate((float)(phase * clips[i].length)) : 0;
+                                }
+                            }
+                            mixed.bodyPosition += pose.bodyPosition * weights[i];
+                            mixed.bodyRotation = Quaternion.Slerp(mixed.bodyRotation, pose.bodyRotation, weights[i] / (total + weights[i]));
+                            for (var m = 0; m < mixed.muscles.Length; m++) mixed.muscles[m] += pose.muscles[m] * weights[i];
+                            total += weights[i];
+                        }
+                        solver.SetInternalHumanPose(ref mixed); solver.GetInternalAvatarPose(avatarPose);
+                    }
+                    var matrices = new Matrix4x4[transforms.Length];
+                    for (var bone = 0; bone < transforms.Length; bone++)
+                    {
+                        var actual = BoneLocalPose.Identity; var total = 0f;
+                        for (var i = 0; i < inputCount; i++)
+                        {
+                            var blob = baked[i];
+                            var pose = ClipSampler.SampleBone(ref blob.Value, bone, phase * clips[i].length);
+                            actual = PoseBlendMath.Override(actual, pose, weights[i] / (total + weights[i])); total += weights[i];
+                        }
+                        if (muscleSpace)
+                        {
+                            var j = bone * 7;
+                            actual.Position = new float3(avatarPose[j], avatarPose[j + 1], avatarPose[j + 2]);
+                            actual.Rotation = new quaternion(avatarPose[j + 3], avatarPose[j + 4], avatarPose[j + 5], avatarPose[j + 6]);
+                            actual.Scale = rest[bone].Scale;
+                            if (bone == 0) actual = BoneLocalPose.Identity;
+                        }
+                        var local = Matrix4x4.TRS(actual.Position, actual.Rotation, actual.Scale);
+                        var parent = rig.Value.Parents[bone]; matrices[bone] = parent < 0 ? local : matrices[parent] * local;
+                        if (bone == 0) continue; // Root trajectory is owned by the motor.
+                        var distance = Vector3.Distance(matrices[bone].GetColumn(3), nativePositions[bone]);
+                        var angle = Quaternion.Angle(actual.Rotation, nativeRotations[bone]);
+                        if (distance > maxPosition) { maxPosition = distance; positionBone = rig.Value.Paths[bone].ToString(); }
+                        if (angle > maxAngle) { maxAngle = angle; angleBone = rig.Value.Paths[bone].ToString(); }
+                    }
+                }
+                var report = "inputs=" + inputCount + " muscleSpace=" + muscleSpace + " authored=" + authoredMuscles + " maxJointMeters=" + maxPosition.ToString("R") + " bone=" + positionBone
+                    + " maxLocalDegrees=" + maxAngle.ToString("R") + " bone=" + angleBone;
+                TestContext.WriteLine(report);
+                var reportRoot = Path.GetFullPath("Artifacts/Verification/AnimatorValidation"); Directory.CreateDirectory(reportRoot);
+                File.WriteAllText(Path.Combine(reportRoot, "HumanoidBlend" + inputCount + (authoredMuscles ? "Authored" : muscleSpace ? "Muscles" : "TRS") + ".txt"), report);
+                Assert.That(maxPosition, Is.LessThanOrEqualTo(.02f), report);
+                Assert.That(maxAngle, Is.LessThanOrEqualTo(2f), report);
+            }
+            finally
+            {
+                if (graph.IsValid()) graph.Destroy();
+                reader?.Dispose(); solver?.Dispose();
+                if (avatarPose.IsCreated) avatarPose.Dispose();
+                foreach (var blob in baked) if (blob.IsCreated) blob.Dispose();
+                if (rig.IsCreated) rig.Dispose();
+                if (source != null) UnityEngine.Object.DestroyImmediate(source);
+                UnityEngine.Object.DestroyImmediate(settings);
+                if (scene.IsValid()) EditorSceneManager.ClosePreviewScene(scene);
+            }
+        }
+
+        static AnimationClip Find(string prefix)
+        {
+            var paths = AssetDatabase.FindAssets("t:Model", new[] { Root + "Mixamo" }).Select(AssetDatabase.GUIDToAssetPath)
+                .Where(path => Path.GetFileName(path).StartsWith(prefix, StringComparison.Ordinal)).OrderBy(path => path.Length).ThenBy(path => path).ToArray();
+            Assert.That(paths.Length, Is.GreaterThan(0), "Missing Mixamo motion " + prefix);
+            return AssetDatabase.LoadAllAssetsAtPath(paths[0]).OfType<AnimationClip>().First(x => !x.name.StartsWith("__preview"));
+        }
+    }
+}

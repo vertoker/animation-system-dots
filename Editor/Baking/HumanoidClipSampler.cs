@@ -21,6 +21,9 @@ namespace AnimationSystemDOTS.Editor.Baking
         AnimationClipPlayable playable;
         Transform[] bones;
         BoneLocalPose[] rest;
+        HumanPoseHandler humanReader;
+        HumanPose humanRead;
+        AnimationCurve[] muscleCurves;
         public AnimationClip Clip { get; private set; }
         public EditorCurveBinding[] Bindings { get; private set; }
         public string RootNormalizationIdentity { get; private set; }
@@ -53,12 +56,37 @@ namespace AnimationSystemDOTS.Editor.Baking
                 }
                 var animator = instance.GetComponent<Animator>(); animator.enabled = true; animator.runtimeAnimatorController = null;
                 animator.cullingMode = AnimatorCullingMode.AlwaysAnimate; animator.applyRootMotion = false; animator.fireEvents = false;
+                humanReader = new HumanPoseHandler(animator.avatar, instance.transform);
+                muscleCurves = new AnimationCurve[HumanTrait.MuscleCount];
+                var curves = Bindings.ToDictionary(b => b.propertyName, b => AnimationUtility.GetEditorCurve(Clip, b));
+                for (var m = 0; m < muscleCurves.Length; m++)
+                {
+                    var name = HumanTrait.MuscleName[m];
+                    if (m >= 55)
+                    {
+                        var parts = name.Split(' ');
+                        name = parts[0] + "Hand." + parts[1] + "." + string.Join(" ", parts.Skip(2));
+                    }
+                    curves.TryGetValue(name, out muscleCurves[m]);
+                }
                 graph = PlayableGraph.Create("AnimationSystemDOTS Humanoid Bake"); graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
                 playable = AnimationClipPlayable.Create(graph, Clip); playable.SetApplyFootIK(false); playable.SetApplyPlayableIK(false);
                 AnimationPlayableOutput.Create(graph, "Retargeted target pose", animator).SetSourcePlayable(playable);
                 graph.Play(); graph.Evaluate(0);
             }
             catch { Dispose(); throw; }
+        }
+
+        // Call immediately after Sample(time), while the isolated native target
+        // holds that pose. Body normalization belongs to Unity's Avatar solver;
+        // muscle curves are the authored inputs, not the reader's inverse solve.
+        public BoneLocalPose ReadHumanPose(double time, float[] muscles)
+        {
+            if (muscles.Length != muscleCurves.Length) throw new ArgumentException("Invalid muscle output layout.");
+            humanReader.GetHumanPose(ref humanRead);
+            for (var m = 0; m < muscles.Length; m++)
+                muscles[m] = muscleCurves[m] != null ? muscleCurves[m].Evaluate((float)time) : 0;
+            return new BoneLocalPose { Position = humanRead.bodyPosition, Rotation = humanRead.bodyRotation, Scale = Unity.Mathematics.math.float3(1) };
         }
 
         public BoneLocalPose[] Sample(double time)
@@ -101,6 +129,7 @@ namespace AnimationSystemDOTS.Editor.Baking
 
         public void Dispose()
         {
+            humanReader?.Dispose(); humanReader = null;
             if (graph.IsValid()) { graph.Stop(); graph.Destroy(); EditorApplication.QueuePlayerLoopUpdate(); }
             if (instance != null) UnityEngine.Object.DestroyImmediate(instance);
             if (Clip != null) UnityEngine.Object.DestroyImmediate(Clip);

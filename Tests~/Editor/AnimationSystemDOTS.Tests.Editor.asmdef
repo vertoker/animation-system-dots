@@ -3,6 +3,7 @@
   "rootNamespace": "AnimationSystemDOTS.Tests",
   "references": [
     "AnimationSystemDOTS.Core",
+    "AnimationSystemDOTS.Humanoid",
     "AnimationSystemDOTS.Authoring",
     "AnimationSystemDOTS.Rendering",
     "AnimationSystemDOTS.Editor",

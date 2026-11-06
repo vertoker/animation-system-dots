@@ -15,6 +15,7 @@ Version: 0.1.0 development. The development roadmap is summarized in the reposit
 | Controller state machine | experimental, stage 4 subset | Single-layer AnimatorController conversion, typed parameters, Entry/Exit/AnyState, ordered conditions and timed crossfades; 102/102 Editor+Sandbox and 45/45 Runtime, native discrete/pose traces and live rebake/removal; exact constraints in Controllers.md |
 | Layers, masks, five blend-tree modes | unsupported | Differential controller tests; stage 5 |
 | Humanoid target-specific Editor bake | experimental, partial stage 6 | Imported muscle clips retarget through a valid target Avatar into local TRS; 1000-instance cleaned Workout scene, bind-pose/facing regression, Blender joint reference, native oracle and second-proportion Avatar; see RenderingChecks.md |
+| Precise Humanoid muscle blending | experimental, opt-in | Actual ECS 1/2/3-input Mixamo pose comparisons: maximum 0.177 mm / 0 degrees on tested samples; managed native Avatar conversion without GO/Animator/PlayableGraph, Burst sampling/blending; Editor+Sandbox 107/107 and Runtime 45/45 at the first checkpoint; masks/additive/complete graph acceptance remains open; see Humanoid.md |
 | Root motion extraction/application | unsupported | Crowd uses in-place planar playback, retaining authored turns and height; movement integration remains stage 6 |
 | Events, scalar curves, blend shapes, exports | unsupported | Interval traversal, lifecycle; stage 7 |
 | IK and procedural constraints | unsupported | Analytic and singular configurations; stage 8 |
@@ -26,4 +27,4 @@ Version: 0.1.0 development. The development roadmap is summarized in the reposit
 | Multiple rendering Worlds | unsupported, reproduced | Stock global deformation buffer couples Worlds despite independent CPU palettes; public-API repro and commands in RenderingChecks.md |
 | Linux/Vulkan and macOS/Metal | unsupported | Platform-specific runs required |
 
-Legacy Animation, per-character Animator/PlayableGraph runtime, runtime Avatar retargeting, arbitrary MonoBehaviour/object-reference curves, StateMachineBehaviour callbacks, Animator IK Pass and automatic Timeline/Animation Rigging/VFX Graph compatibility are outside the initial release contract. Editor Playables are verification tools, not an ECS runtime.
+Legacy Animation, per-character Animator/PlayableGraph runtime, arbitrary MonoBehaviour/object-reference curves, StateMachineBehaviour callbacks, Animator IK Pass and automatic Timeline/Animation Rigging/VFX Graph compatibility are outside the initial release contract. Editor Playables are verification tools. The opt-in precise Humanoid adapter uses the public unbound Avatar pose solver at runtime; that conversion is managed/main-thread, not Burst.

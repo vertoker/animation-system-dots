@@ -1,0 +1,117 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using AnimationSystemDOTS.Editor.Baking;
+using NUnit.Framework;
+using Unity.Collections;
+using UnityEditor;
+using UnityEngine;
+
+namespace AnimationSystemDOTS.Tests
+{
+    public class HumanoidBodyCenterProbeTests
+    {
+        [Test, Explicit("Characterize body-center reconstruction before implementing the Burst solver.")]
+        public void NativeAvatar_BodyCenterIsReconstructibleFromJointPositions()
+        {
+            var source = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AnimationSystemDOTS.Sandbox/Humanoid/Model/BaldMale.fbx");
+            var rig = RigBakePipeline.Bake(source); Assert.That(rig.Success, Is.True);
+            try
+            {
+                var count = rig.Rig.Value.Paths.Length;
+                var paths = Enumerable.Range(0, count).Select(i => rig.Rig.Value.Paths[i].ToString()).ToArray();
+                var hips = Array.FindIndex(paths, p => p.EndsWith("/pelvis"));
+                var avatar = source.GetComponent<Animator>().avatar;
+                var centerBones = avatar.humanDescription.human.Select(h => Array.FindIndex(paths, p => p.EndsWith("/" + h.boneName))).Where(i => i >= 0 && i != hips).ToArray();
+                var featuresCount = centerBones.Length + 3;
+                var covariance = new double[featuresCount, featuresCount]; var target = new double[featuresCount];
+                using (var handler = new HumanPoseHandler(avatar, paths))
+                {
+                    var pose = new NativeArray<float>(count * 7, Allocator.Temp);
+                    try
+                    {
+                        for (var i = 0; i < count; i++)
+                        {
+                            var rest = rig.Rig.Value.RestLocalPoses[i]; var j = i * 7;
+                            pose[j] = rest.Position.x; pose[j + 1] = rest.Position.y; pose[j + 2] = rest.Position.z;
+                            pose[j + 3] = rest.Rotation.value.x; pose[j + 4] = rest.Rotation.value.y; pose[j + 5] = rest.Rotation.value.z; pose[j + 6] = rest.Rotation.value.w;
+                        }
+                        handler.SetInternalAvatarPose(pose);
+                        var human = new HumanPose { bodyPosition = Vector3.zero, bodyRotation = Quaternion.identity, muscles = new float[HumanTrait.MuscleCount] };
+                        handler.SetInternalHumanPose(ref human); handler.GetInternalAvatarPose(pose);
+                        human.bodyPosition = Vector3.up;
+                        handler.SetInternalHumanPose(ref human); handler.GetInternalAvatarPose(pose);
+                        var humanScale = source.GetComponent<Animator>().humanScale;
+                        Assert.That(humanScale, Is.GreaterThan(0));
+                        var random = new System.Random(8016); double[] weights = null; var max = 0f; var worst = 0;
+                        for (var sample = 0; sample < 1536; sample++)
+                        {
+                            for (var m = 0; m < human.muscles.Length; m++) human.muscles[m] = (float)(random.NextDouble() * 2.4 - 1.2);
+                            handler.SetInternalHumanPose(ref human); handler.GetInternalAvatarPose(pose);
+                            var matrices = new Matrix4x4[count];
+                            for (var b = 0; b < count; b++)
+                            {
+                                var j = b * 7; var parent = rig.Rig.Value.Parents[b];
+                                var local = Matrix4x4.TRS(new Vector3(pose[j], pose[j + 1], pose[j + 2]), new Quaternion(pose[j + 3], pose[j + 4], pose[j + 5], pose[j + 6]), rig.Rig.Value.RestLocalPoses[b].Scale);
+                                matrices[b] = parent < 0 ? local : matrices[parent] * local;
+                            }
+                            Vector3 hipPosition = matrices[hips].GetColumn(3); var inverse = Quaternion.Inverse(matrices[hips].rotation);
+                            var expected = inverse * (Vector3.up * humanScale - hipPosition);
+                            var features = new Vector3[featuresCount];
+                            for (var b = 0; b < centerBones.Length; b++) features[b] = inverse * ((Vector3)matrices[centerBones[b]].GetColumn(3) - hipPosition);
+                            features[centerBones.Length] = Vector3.right; features[centerBones.Length + 1] = Vector3.up; features[centerBones.Length + 2] = Vector3.forward;
+                            if (sample < 1024)
+                            {
+                                for (var i = 0; i < featuresCount; i++)
+                                {
+                                    target[i] += Vector3.Dot(features[i], expected);
+                                    for (var j = 0; j < featuresCount; j++) covariance[i, j] += Vector3.Dot(features[i], features[j]);
+                                }
+                            }
+                            else
+                            {
+                                if (weights == null) weights = Solve(covariance, target);
+                                var actual = Vector3.zero;
+                                for (var i = 0; i < featuresCount; i++) actual += features[i] * (float)weights[i];
+                                var error = Vector3.Distance(actual, expected);
+                                if (error > max) { max = error; worst = sample; }
+                            }
+                        }
+                        var lines = new List<string> { "humanScale=" + humanScale + " maxCenterMeters=" + max + " sample=" + worst };
+                        for (var i = 0; i < weights.Length; i++) if (Math.Abs(weights[i]) > .0001) lines.Add((i < centerBones.Length ? paths[centerBones[i]] : "offset" + (i - centerBones.Length)) + "=" + weights[i]);
+                        var root = Path.GetFullPath("Artifacts/Verification/AnimatorValidation"); Directory.CreateDirectory(root);
+                        File.WriteAllLines(Path.Combine(root, "BodyCenterCalibration.txt"), lines); TestContext.WriteLine(lines[0]);
+                        Assert.That(max, Is.LessThan(.0005f));
+                    }
+                    finally { pose.Dispose(); }
+                }
+            }
+            finally { rig.Rig.Dispose(); }
+        }
+
+        static double[] Solve(double[,] matrix, double[] target)
+        {
+            var count = target.Length; var a = (double[,])matrix.Clone(); var b = (double[])target.Clone();
+            var ridge = Enumerable.Range(0, count).Max(i => a[i, i]) * 1e-9;
+            for (var i = 0; i < count; i++) a[i, i] += ridge;
+            for (var column = 0; column < count; column++)
+            {
+                var pivot = column;
+                for (var row = column + 1; row < count; row++) if (Math.Abs(a[row, column]) > Math.Abs(a[pivot, column])) pivot = row;
+                for (var j = column; j < count; j++) { var swap = a[column, j]; a[column, j] = a[pivot, j]; a[pivot, j] = swap; }
+                var t = b[column]; b[column] = b[pivot]; b[pivot] = t;
+                var divisor = a[column, column]; Assert.That(Math.Abs(divisor), Is.GreaterThan(1e-15));
+                for (var j = column; j < count; j++) a[column, j] /= divisor; b[column] /= divisor;
+                for (var row = 0; row < count; row++)
+                {
+                    if (row == column) continue;
+                    var factor = a[row, column];
+                    for (var j = column; j < count; j++) a[row, j] -= a[column, j] * factor;
+                    b[row] -= b[column] * factor;
+                }
+            }
+            return b;
+        }
+    }
+}

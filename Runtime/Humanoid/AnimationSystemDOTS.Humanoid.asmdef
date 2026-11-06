@@ -1,0 +1,5 @@
+{
+  "name": "AnimationSystemDOTS.Humanoid",
+  "rootNamespace": "AnimationSystemDOTS.Humanoid",
+  "references": ["AnimationSystemDOTS.Core", "Unity.Entities", "Unity.Collections", "Unity.Mathematics", "Unity.Burst"]
+}

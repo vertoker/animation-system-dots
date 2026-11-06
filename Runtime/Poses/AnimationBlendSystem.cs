@@ -11,6 +11,7 @@ namespace AnimationSystemDOTS
         protected override void OnUpdate() => Dependency = new BlendJob().ScheduleParallel(Dependency);
 
         [BurstCompile]
+        [WithNone(typeof(PreciseHumanoidPose))]
         partial struct BlendJob : IJobEntity
         {
             void Execute(in AnimationRig rig, in DynamicBuffer<AnimationClipRequest> requests,

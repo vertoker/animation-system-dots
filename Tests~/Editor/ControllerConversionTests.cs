@@ -313,7 +313,13 @@ namespace AnimationSystemDOTS.Tests
                     em.SetComponentData(step, new AnimationStepContext { Tick = (ulong)tick + 1, DeltaTime = dt }); system.Update(); em.CompleteAllTrackedJobs();
                     var layer = em.GetComponentData<ControllerLayerState>(entity); var current = playable.GetCurrentAnimatorStateInfo(0); var next = playable.GetNextAnimatorStateInfo(0);
                     var context = scenario + " tick " + tick;
-                    Assert.That(ControllerStateQuery.TryGet(layer, out var snapshot), Is.True, context);
+                    Assert.That(ControllerStateQuery.TryGet(layer, out var snapshot), Is.True, context + " result=" + layer.Result
+                        + " initialized=" + layer.Initialized + " library=" + library.Value.Version + " schema=" + AnimationBakeVersion.Schema
+                        + " graph=" + result.Controller.Value.Version + " graphSchema=" + AnimatorControllerBlob.CurrentVersion
+                        + " libKey=" + library.Value.ContentKey + " graphKey=" + result.Controller.Value.LibraryKey
+                        + " keysEqual=" + (result.Controller.Value.LibraryKey == library.Value.ContentKey)
+                        + " actualLib=" + em.GetComponentData<AnimationRig>(entity).Library.Value.Version
+                        + " actualGraph=" + em.GetComponentData<AnimationController>(entity).Definition.Value.Version);
                     Assert.That(current.fullPathHash, Is.EqualTo(Animator.StringToHash(result.Controller.Value.States[snapshot.CurrentState].Path.ToString())), context);
                     Assert.That(snapshot.NormalizedTime, Is.EqualTo(current.normalizedTime).Within(2e-5), context + " current time");
                     Assert.That(snapshot.IsInTransition, Is.EqualTo(playable.IsInTransition(0)), context + " transition");

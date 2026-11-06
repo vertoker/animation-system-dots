@@ -6,5 +6,7 @@ namespace AnimationSystemDOTS.Authoring
     public sealed class AnimationBakeSettings : AnimationValidationSettings
     {
         [Min(1)] public int MaximumSamplesPerClip = 65536;
+        [Tooltip("Precise Muscles blends before retargeting and requires the Humanoid runtime adapter. Baked Target TRS preserves the previous fast approximate blending path.")]
+        public HumanoidPoseMode HumanoidPoseMode;
     }
 }

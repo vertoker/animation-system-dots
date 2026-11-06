@@ -32,6 +32,15 @@ namespace AnimationSystemDOTS.Editor.Baking
                 for (var bone = 0; bone < clip.Tracks.Length; bone++)
                     if (clip.Tracks[bone].Samples.Length != 1 && clip.Tracks[bone].Samples.Length != clip.SampleCount)
                         return Failure($"Library clip {i}, bone {bone} has an invalid sample count.");
+                if (clip.HumanMuscles.Length != 0)
+                {
+                    if (clip.HumanMuscles.Length != 95 || clip.HumanBody.Length != clip.SampleCount)
+                        return Failure($"Library clip {i} has an invalid Humanoid channel layout.");
+                    for (var m = 0; m < clip.HumanMuscles.Length; m++)
+                        if (clip.HumanMuscles[m].Samples.Length != 1 && clip.HumanMuscles[m].Samples.Length != clip.SampleCount)
+                            return Failure($"Library clip {i}, muscle {m} has an invalid sample count.");
+                }
+                else if (clip.HumanBody.Length != 0) return Failure($"Library clip {i} has a body track without Humanoid muscle channels.");
                 identity.Append(':').Append(clip.ContentKey.ToString());
             }
 
@@ -66,6 +75,14 @@ namespace AnimationSystemDOTS.Editor.Baking
                 var samples = builder.Allocate(ref tracks[i].Samples, source.Tracks[i].Samples.Length);
                 for (var j = 0; j < samples.Length; j++) samples[j] = source.Tracks[i].Samples[j];
             }
+            var muscles = builder.Allocate(ref target.HumanMuscles, source.HumanMuscles.Length);
+            for (var i = 0; i < muscles.Length; i++)
+            {
+                var samples = builder.Allocate(ref muscles[i].Samples, source.HumanMuscles[i].Samples.Length);
+                for (var j = 0; j < samples.Length; j++) samples[j] = source.HumanMuscles[i].Samples[j];
+            }
+            var bodies = builder.Allocate(ref target.HumanBody, source.HumanBody.Length);
+            for (var i = 0; i < bodies.Length; i++) bodies[i] = source.HumanBody[i];
         }
 
         static LibraryBakeResult Failure(string diagnostic) => new LibraryBakeResult { Diagnostics = new[] { diagnostic } };
